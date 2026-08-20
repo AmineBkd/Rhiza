@@ -1,3 +1,0 @@
-/Users/amine/Desktop/Rhiza/build/CMakeFiles/Rhiza.dir
-/Users/amine/Desktop/Rhiza/build/CMakeFiles/edit_cache.dir
-/Users/amine/Desktop/Rhiza/build/CMakeFiles/rebuild_cache.dir
