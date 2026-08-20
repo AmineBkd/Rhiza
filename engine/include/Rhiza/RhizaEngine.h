@@ -1,7 +1,6 @@
 #pragma once
 
 struct SDL_Window;
-struct SDL_Renderer;
 
 class RhizaEngine {
     public:
@@ -10,5 +9,5 @@ class RhizaEngine {
         void initialize_renderer();
     private:
         SDL_Window *window = nullptr;
-        SDL_Renderer *renderer = nullptr;
+
 };
