@@ -6,6 +6,7 @@ add_library(${PROJECT_NAME} STATIC
     src/Renderer.cpp
     src/Shapes.cpp
     src/Input.cpp
+    src/Clock.cpp
     include/Rhiza/RhizaEngine.h
     include/Rhiza/Types.h
     include/Rhiza/Shapes.h
@@ -13,6 +14,7 @@ add_library(${PROJECT_NAME} STATIC
     src/Window.h
     src/Renderer.h
     src/Input.h
+    src/Clock.h
 )
 
 target_include_directories(${PROJECT_NAME}

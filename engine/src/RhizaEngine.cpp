@@ -1,4 +1,5 @@
 #include <Rhiza/RhizaEngine.h>
+#include "Clock.h"
 #include "Input.h"
 #include "Renderer.h"
 #include "Window.h"
@@ -10,6 +11,7 @@ namespace Rhiza
         Window window;
         Renderer renderer;
         Input input;
+        Clock clock;
         bool running = false;
     };
 
@@ -55,6 +57,11 @@ namespace Rhiza
     {
         if( !mImpl || !mImpl->running )
             return false;
+
+        // Measures the time the *previous* iteration of this loop took
+        // (everything below, plus whatever the OS/compositor made us wait
+        // for) - the conventional meaning of "this frame's delta time".
+        mImpl->clock.tick();
 
         if( !mImpl->window.pollEvents( mImpl->input ) )
         {
@@ -125,6 +132,27 @@ namespace Rhiza
     bool RhizaEngine::wasKeyReleased( Key key ) const
     {
         return mImpl && mImpl->input.wasKeyReleased( key );
+    }
+
+    float RhizaEngine::deltaSeconds() const
+    {
+        return mImpl ? mImpl->clock.scaledDeltaSeconds() : 0.0f;
+    }
+
+    float RhizaEngine::unscaledDeltaSeconds() const
+    {
+        return mImpl ? mImpl->clock.realDeltaSeconds() : 0.0f;
+    }
+
+    float RhizaEngine::timeScale() const
+    {
+        return mImpl ? mImpl->clock.timeScale() : 1.0f;
+    }
+
+    void RhizaEngine::setTimeScale( float scale )
+    {
+        if( mImpl )
+            mImpl->clock.setTimeScale( scale );
     }
 
 }  // namespace Rhiza

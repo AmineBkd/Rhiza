@@ -20,3 +20,13 @@ target_include_directories(InputTests PRIVATE
 )
 
 add_test(NAME InputTests COMMAND InputTests)
+
+# Same reasoning as InputTests: Clock has no SDL or Ogre dependency (just
+# <chrono>), so it's compiled directly rather than linked.
+add_executable(ClockTests ClockTests.cpp ${CMAKE_SOURCE_DIR}/engine/src/Clock.cpp)
+target_include_directories(ClockTests PRIVATE
+    ${CMAKE_SOURCE_DIR}/engine/include
+    ${CMAKE_SOURCE_DIR}/engine/src
+)
+
+add_test(NAME ClockTests COMMAND ClockTests)

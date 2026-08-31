@@ -71,6 +71,21 @@ public:
     // True only on the frame `key` went from down to up.
     bool wasKeyReleased(Key key) const;
 
+    // Seconds since the previous tick(), scaled by timeScale(). Drives
+    // gameplay and in-world animation - this is what hitstop freezes or
+    // slows down. Zero before the first tick().
+    float deltaSeconds() const;
+
+    // Seconds since the previous tick(), never scaled. Drives input, UI and
+    // anything else that must keep moving through a hitstop.
+    float unscaledDeltaSeconds() const;
+
+    // Multiplier applied to unscaledDeltaSeconds() to produce deltaSeconds().
+    // 1 = normal speed, 0 = frozen (hitstop), negative = time running
+    // backward. Defaults to 1.
+    float timeScale() const;
+    void setTimeScale(float scale);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> mImpl;

@@ -36,8 +36,23 @@ int main( int argc, char *argv[] )
     Rhiza::SceneNodeHandle groundNode = engine.createMesh( ground );
     engine.setPosition( groundNode, { 0.0f, -1.5f, 0.0f } );
 
+    Rhiza::Vec3 flatPosition{ -3.5f, 0.0f, 0.0f };
+
     while( engine.tick() )
     {
+        // Arrow-key smoke test for Rhiza::Key and deltaSeconds(): moves the
+        // flat cube at a fixed speed regardless of frame rate.
+        constexpr float unitsPerSecond = 3.0f;
+        const float step = unitsPerSecond * engine.deltaSeconds();
+        if( engine.isKeyDown( Rhiza::Key::Left ) )
+            flatPosition.x -= step;
+        if( engine.isKeyDown( Rhiza::Key::Right ) )
+            flatPosition.x += step;
+        if( engine.isKeyDown( Rhiza::Key::Up ) )
+            flatPosition.z -= step;
+        if( engine.isKeyDown( Rhiza::Key::Down ) )
+            flatPosition.z += step;
+        engine.setPosition( flat, flatPosition );
     }
 
     return 0;
