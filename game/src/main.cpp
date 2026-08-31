@@ -4,7 +4,8 @@
 int main( int argc, char *argv[] )
 {
     Rhiza::RhizaEngine engine;
-    if( !engine.initialize() )
+    Rhiza::EngineSettings settings;
+    if( !engine.initialize( settings ) )
         return 1;
 
     // The sun. Every Lit material in the scene responds to it.
@@ -50,8 +51,43 @@ int main( int argc, char *argv[] )
 
     Rhiza::Vec3 flatPosition{ -3.5f, 0.0f, 0.0f };
 
+    // No control system yet - this is plain game code reading Input and
+    // Clock directly, the same way the arrow-key cube movement below does.
+    // Position and target are tracked here (not queryable from RhizaEngine)
+    // and shifted by the same delta each frame, which pans the view without
+    // changing its angle.
+    Rhiza::Vec3 cameraPosition = settings.cameraPosition;
+    Rhiza::Vec3 cameraTarget = settings.cameraTarget;
+
     while( engine.tick() )
     {
+        // WASD smoke test for Rhiza::Key and deltaSeconds(): pans the
+        // camera on the X/Z plane at a fixed speed regardless of frame rate.
+        // Arrow keys are left free for the cube movement below.
+        constexpr float cameraUnitsPerSecond = 4.0f;
+        const float camStep = cameraUnitsPerSecond * engine.deltaSeconds();
+        if( engine.isKeyDown( Rhiza::Key::W ) )
+        {
+            cameraPosition.z -= camStep;
+            cameraTarget.z -= camStep;
+        }
+        if( engine.isKeyDown( Rhiza::Key::S ) )
+        {
+            cameraPosition.z += camStep;
+            cameraTarget.z += camStep;
+        }
+        if( engine.isKeyDown( Rhiza::Key::A ) )
+        {
+            cameraPosition.x -= camStep;
+            cameraTarget.x -= camStep;
+        }
+        if( engine.isKeyDown( Rhiza::Key::D ) )
+        {
+            cameraPosition.x += camStep;
+            cameraTarget.x += camStep;
+        }
+        engine.setCamera( cameraPosition, cameraTarget );
+
         // Arrow-key smoke test for Rhiza::Key and deltaSeconds(): moves the
         // flat cube at a fixed speed regardless of frame rate.
         constexpr float unitsPerSecond = 3.0f;
