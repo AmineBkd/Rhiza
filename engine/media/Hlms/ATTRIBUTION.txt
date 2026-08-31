@@ -1,0 +1,17 @@
+These shader template files (.any / .hlsl) are copied unmodified from the
+OGRE-Next project (https://github.com/OGRECave/ogre-next), from its
+Samples/Media/Hlms directory, matching the v3.0.0 tag used by vcpkg's
+ogre-next port. OGRE-Next is MIT licensed (see its COPYING file).
+
+The vcpkg ogre-next port builds and installs the Hlms *compiled* libraries
+(OgreNextHlmsUnlit, OgreNextHlmsPbs, ...) but does not install these *source*
+shader-piece files, since HLMS compiles GPU programs at runtime by piecing
+these files together. Without them, HlmsUnlit::getDefaultPaths() has nothing
+to load and Hlms initialization fails. They are vendored here so the engine
+is self-contained and doesn't depend on the vcpkg buildtrees directory
+(which may not exist on a clean install / binary-cached build).
+
+Only the Common + Unlit HLSL/Any subsets are included, since Rhiza's D3D11
+render system (the default on Windows) only needs those. Add the
+Common/GLSL and Unlit/GLSL folders (same upstream source) if a GL3Plus
+target is ever supported.

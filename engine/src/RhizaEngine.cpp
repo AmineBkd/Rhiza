@@ -1,46 +1,82 @@
-#include <iostream>
-#include <SDL3/SDL.h>
 #include <Rhiza/RhizaEngine.h>
-#include <OGRE-Next/Ogre.h>
+#include "Renderer.h"
+#include "Window.h"
 
-RhizaEngine::RhizaEngine() { }
-
-int RhizaEngine::initialize_window() {
-    std::string window_name = "Rhiza";
-    if (!SDL_Init(SDL_INIT_VIDEO))
+namespace Rhiza
+{
+    struct RhizaEngine::Impl
     {
-        SDL_Log("SDL_Init Error: %s", SDL_GetError());
-        return 1;
-    }
-    window = SDL_CreateWindow(window_name.c_str(), 800, 600, 0);
-    if (!window) {
-        SDL_Log("Window Creation Error: %s", SDL_GetError());
-        SDL_Quit();
-        return 1;
-    }
-    return 0;
-}
+        Window window;
+        Renderer renderer;
+        bool running = false;
+    };
 
-void RhizaEngine::initialize_renderer() {
-    SDL_Event event;
-    bool is_running = true;
+    RhizaEngine::RhizaEngine() = default;
 
-    while (is_running) {
-        while(SDL_PollEvent(&event)) {
-            if(event.type == SDL_EVENT_QUIT) {
-                is_running = false;
-            }
+    RhizaEngine::~RhizaEngine() {
+        shutdown();
+    }
+
+    bool RhizaEngine::initialize( const EngineSettings &settings )
+    {
+        mImpl = std::make_unique<Impl>();
+
+        if( !mImpl->window.initialize( settings.windowTitle, settings.windowWidth, settings.windowHeight ) )
+        {
+            mImpl.reset();
+            return false;
         }
 
-        //SDL_SetRenderDrawColor(renderer, 20, 40, 80, 255);
-        //SDL_RenderClear(renderer);
+        const NativeWindowHandle handle = mImpl->window.getNativeHandle();
+        if( !mImpl->renderer.initialize( handle, settings.windowTitle, settings.windowWidth,
+                                         settings.windowHeight ) )
+        {
+            mImpl->window.shutdown();
+            mImpl.reset();
+            return false;
+        }
 
-        //SDL_RenderPresent(renderer);
+        mImpl->running = true;
+        return true;
     }
 
+    void RhizaEngine::shutdown()
+    {
+        if( !mImpl )
+            return;
 
-    std::cout << "exiting ..." << std::endl;
-    //SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-}
+        mImpl->renderer.shutdown();
+        mImpl->window.shutdown();
+        mImpl.reset();
+    }
+
+    bool RhizaEngine::tick()
+    {
+        if( !mImpl || !mImpl->running )
+            return false;
+
+        if( !mImpl->window.pollEvents() )
+        {
+            mImpl->running = false;
+            return false;
+        }
+
+        mImpl->renderer.renderOneFrame();
+        return true;
+    }
+
+    SceneNodeHandle RhizaEngine::createMesh( const MeshDesc &desc )
+    {
+        SceneNodeHandle handle;
+        if( mImpl )
+            handle.id = mImpl->renderer.createMesh( desc );
+        return handle;
+    }
+
+    void RhizaEngine::setPosition( SceneNodeHandle handle, Vec3 position )
+    {
+        if( mImpl && handle.isValid() )
+            mImpl->renderer.setPosition( handle.id, position );
+    }
+
+}  // namespace Rhiza

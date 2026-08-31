@@ -1,0 +1,49 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 23, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build",
+      "toolchainFile": "${sourceDir}/third_party/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "windows",
+      "displayName": "Windows (x64, dynamic)",
+      "description": "Default vcpkg triplet (x64-windows) is already dynamic.",
+      "inherits": "base",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "linux",
+      "displayName": "Linux (x64, dynamic)",
+      "description": "vcpkg's default x64-linux triplet is static; ogre-next's D3D11-style runtime plugin loading needs dynamic libraries instead, so this pins the community x64-linux-dynamic triplet.",
+      "inherits": "base",
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "macos-arm64",
+      "displayName": "macOS (Apple Silicon, dynamic)",
+      "description": "vcpkg's default arm64-osx triplet is static; same reasoning as linux above.",
+      "inherits": "base",
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "arm64-osx-dynamic" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
+    },
+    {
+      "name": "macos-x64",
+      "displayName": "macOS (Intel, dynamic)",
+      "description": "For Intel Macs; see macos-arm64 for Apple Silicon.",
+      "inherits": "base",
+      "cacheVariables": { "VCPKG_TARGET_TRIPLET": "x64-osx-dynamic" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows", "configurePreset": "windows" },
+    { "name": "linux", "configurePreset": "linux" },
+    { "name": "macos-arm64", "configurePreset": "macos-arm64" },
+    { "name": "macos-x64", "configurePreset": "macos-x64" }
+  ]
+}
