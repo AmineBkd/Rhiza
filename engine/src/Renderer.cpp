@@ -1,6 +1,8 @@
 #include "Renderer.h"
 
+#include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "OgreRoot.h"
 #include "OgreAbiUtils.h"
@@ -17,6 +19,7 @@
 #include "OgreHlmsManager.h"
 #include "OgreHlmsCommon.h"
 #include "OgreArchiveManager.h"
+#include "OgreLogManager.h"
 #include "Compositor/OgreCompositorManager2.h"
 #include "Compositor/OgreCompositorWorkspace.h"
 #include "Vao/OgreVaoManager.h"
@@ -104,6 +107,83 @@ struct GpuVertex
     float nx, ny, nz;
 };
 
+// Owns a block of OGRE_MALLOC_SIMD memory until Ogre takes it over. The Vao
+// creation calls adopt the pointer when they succeed - we always pass
+// keepAsShadow = true - but if one throws, freeing it is still our job.
+// Holding it here means the throwing path cannot leak.
+template <typename T>
+class SimdArray
+{
+public:
+    explicit SimdArray( size_t count ) :
+        mPtr( static_cast<T *>(
+            OGRE_MALLOC_SIMD( sizeof( T ) * count, Ogre::MEMCATEGORY_GEOMETRY ) ) )
+    {
+    }
+
+    ~SimdArray()
+    {
+        if( mPtr )
+            OGRE_FREE_SIMD( mPtr, Ogre::MEMCATEGORY_GEOMETRY );
+    }
+
+    SimdArray( const SimdArray & ) = delete;
+    SimdArray &operator=( const SimdArray & ) = delete;
+
+    T *get() const { return mPtr; }
+    T &operator[]( size_t i ) { return mPtr[i]; }
+
+    // Ogre now owns the block; stop tracking it.
+    void release() { mPtr = nullptr; }
+
+private:
+    T *mPtr;
+};
+
+// Returns an empty string when the description can be turned into a mesh,
+// otherwise a human-readable reason why it cannot. Checking up front means
+// a caller mistake produces a log line rather than an Ogre assertion or,
+// worse, an out-of-range index that reads garbage on the GPU.
+std::string describeProblem( const MeshDesc &desc )
+{
+    if( desc.vertices.empty() )
+        return "it has no vertices";
+    if( desc.indices.empty() )
+        return "it has no indices";
+    if( desc.indices.size() % 3u != 0u )
+        return "its index count " + std::to_string( desc.indices.size() ) +
+               " is not a multiple of 3, so it is not a triangle list";
+
+    // MeshDesc::indices is uint16_t, so anything past 65536 vertices simply
+    // cannot be addressed. Say so rather than silently ignoring the tail.
+    if( desc.vertices.size() > 65536u )
+        return "it has " + std::to_string( desc.vertices.size() ) +
+               " vertices, more than 16-bit indices can address (65536)";
+
+    const size_t vertexCount = desc.vertices.size();
+    for( size_t i = 0; i < desc.indices.size(); ++i )
+    {
+        if( desc.indices[i] >= vertexCount )
+        {
+            return "index " + std::to_string( i ) + " refers to vertex " +
+                   std::to_string( desc.indices[i] ) + ", but there are only " +
+                   std::to_string( vertexCount );
+        }
+    }
+
+    return {};
+}
+
+// Ogre's log is the one place these messages are useful, but it only exists
+// once Root has been constructed - and initialize() can fail before that.
+void logError( const std::string &message )
+{
+    if( Ogre::LogManager::getSingletonPtr() )
+        Ogre::LogManager::getSingleton().logMessage( "[Rhiza] " + message, Ogre::LML_CRITICAL );
+    else
+        fprintf( stderr, "[Rhiza] %s\n", message.c_str() );
+}
+
 Ogre::Vector3 toOgre( const Vec3 &v )
 {
     return Ogre::Vector3( v.x, v.y, v.z );
@@ -121,9 +201,28 @@ Renderer::~Renderer()
     shutdown();
 }
 
-bool Renderer::initialize( const NativeWindowHandle &windowHandle, const std::string &title,
-                           int width, int height )
+bool Renderer::initialize( const NativeWindowHandle &windowHandle, const EngineSettings &settings )
 {
+    // Ogre signals nearly every startup failure by throwing - a missing
+    // render system plugin, an unusable window handle, a missing Hlms
+    // template folder. Rhiza's contract is a false return, so the whole
+    // sequence is contained here and translated at this boundary.
+    try
+    {
+        return initializeInternal( windowHandle, settings );
+    }
+    catch( Ogre::Exception &e )
+    {
+        logError( "renderer initialization failed: " + e.getDescription() );
+        return false;
+    }
+}
+
+bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
+                                   const EngineSettings &settings )
+{
+    const std::string title = settings.windowTitle;
+
     const Ogre::AbiCookie abiCookie = Ogre::generateAbiCookie();
     mRoot = OGRE_NEW Ogre::Root( &abiCookie, Ogre::BLANKSTRING, Ogre::BLANKSTRING, "Rhiza.log", title );
 
@@ -131,7 +230,11 @@ bool Renderer::initialize( const NativeWindowHandle &windowHandle, const std::st
 
     Ogre::RenderSystem *renderSystem = mRoot->getRenderSystemByName( kRenderSystemName );
     if( !renderSystem )
+    {
+        logError( std::string( "render system '" ) + kRenderSystemName +
+                  "' was not found after loading " + getRenderSystemPluginPath() );
         return false;
+    }
 
     mRoot->setRenderSystem( renderSystem );
     mRoot->initialise( false );
@@ -145,8 +248,10 @@ bool Renderer::initialize( const NativeWindowHandle &windowHandle, const std::st
     params["externalWindowHandle"] = Ogre::StringConverter::toString( windowHandle.value );
     params["vsync"] = "Yes";
 
-    mRenderWindow = mRoot->createRenderWindow( title, static_cast<Ogre::uint32>( width ),
-                                               static_cast<Ogre::uint32>( height ), false, &params );
+    mRenderWindow =
+        mRoot->createRenderWindow( title, static_cast<Ogre::uint32>( settings.windowWidth ),
+                                   static_cast<Ogre::uint32>( settings.windowHeight ), false,
+                                   &params );
 
     registerHlms();
 
@@ -157,11 +262,8 @@ bool Renderer::initialize( const NativeWindowHandle &windowHandle, const std::st
     // can override it via setAmbientLight().
     setAmbientLight( Color{ 0.3f, 0.35f, 0.45f, 1.0f }, Color{ 0.15f, 0.14f, 0.13f, 1.0f } );
 
-    // Offset from the axis so a cube shows three faces at three different
-    // brightnesses - straight-on, lighting is much harder to judge.
     mCamera = mSceneManager->createCamera( "MainCamera" );
-    mCamera->setPosition( Ogre::Vector3( 3.5f, 3.0f, 5.0f ) );
-    mCamera->lookAt( Ogre::Vector3::ZERO );
+    setCamera( settings.cameraPosition, settings.cameraTarget );
     mCamera->setNearClipDistance( 0.1f );
     mCamera->setFarClipDistance( 1000.0f );
     mCamera->setAutoAspectRatio( true );
@@ -225,8 +327,10 @@ void Renderer::shutdown()
     if( !mRoot )
         return;
 
-    mSceneNodes.clear();
-    mLightNodes.clear();
+    // Ogre::Root's destructor tears down the scene manager and everything
+    // in it, so these only need forgetting, not individually destroying.
+    mMeshes.clear();
+    mLights.clear();
 
     if( mWorkspace )
     {
@@ -252,6 +356,13 @@ void Renderer::renderOneFrame()
 
 uint32_t Renderer::createMesh( const MeshDesc &desc )
 {
+    const std::string problem = describeProblem( desc );
+    if( !problem.empty() )
+    {
+        logError( "createMesh rejected a mesh because " + problem );
+        return 0;
+    }
+
     Ogre::VaoManager *vaoManager = mRoot->getRenderSystem()->getVaoManager();
 
     // Position and normal interleaved in one buffer. The declared element
@@ -262,9 +373,9 @@ uint32_t Renderer::createMesh( const MeshDesc &desc )
     vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_NORMAL ) );
 
     const size_t numVertices = desc.vertices.size();
-    GpuVertex *vertexData = reinterpret_cast<GpuVertex *>(
-        OGRE_MALLOC_SIMD( sizeof( GpuVertex ) * numVertices, Ogre::MEMCATEGORY_GEOMETRY ) );
+    const size_t numIndices = desc.indices.size();
 
+    SimdArray<GpuVertex> vertexData( numVertices );
     Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
     for( size_t i = 0; i < numVertices; ++i )
     {
@@ -274,22 +385,39 @@ uint32_t Renderer::createMesh( const MeshDesc &desc )
         bounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
     }
 
-    Ogre::VertexBufferPacked *vertexBuffer =
-        vaoManager->createVertexBuffer( vertexElements, numVertices, Ogre::BT_IMMUTABLE, vertexData,
-                                        true );
+    SimdArray<Ogre::uint16> indexData( numIndices );
+    std::memcpy( indexData.get(), desc.indices.data(), sizeof( Ogre::uint16 ) * numIndices );
 
-    const size_t numIndices = desc.indices.size();
-    Ogre::uint16 *indexData = reinterpret_cast<Ogre::uint16 *>(
-        OGRE_MALLOC_SIMD( sizeof( Ogre::uint16 ) * numIndices, Ogre::MEMCATEGORY_GEOMETRY ) );
-    std::memcpy( indexData, desc.indices.data(), sizeof( Ogre::uint16 ) * numIndices );
+    Ogre::VertexBufferPacked *vertexBuffer = nullptr;
+    Ogre::IndexBufferPacked *indexBuffer = nullptr;
+    Ogre::VertexArrayObject *vao = nullptr;
+    try
+    {
+        vertexBuffer = vaoManager->createVertexBuffer( vertexElements, numVertices,
+                                                       Ogre::BT_IMMUTABLE, vertexData.get(), true );
+        vertexData.release();
 
-    Ogre::IndexBufferPacked *indexBuffer = vaoManager->createIndexBuffer(
-        Ogre::IndexBufferPacked::IT_16BIT, numIndices, Ogre::BT_IMMUTABLE, indexData, true );
+        indexBuffer = vaoManager->createIndexBuffer( Ogre::IndexBufferPacked::IT_16BIT, numIndices,
+                                                     Ogre::BT_IMMUTABLE, indexData.get(), true );
+        indexData.release();
 
-    Ogre::VertexBufferPackedVec vertexBuffers;
-    vertexBuffers.push_back( vertexBuffer );
-    Ogre::VertexArrayObject *vao =
-        vaoManager->createVertexArrayObject( vertexBuffers, indexBuffer, Ogre::OT_TRIANGLE_LIST );
+        Ogre::VertexBufferPackedVec vertexBuffers;
+        vertexBuffers.push_back( vertexBuffer );
+        vao = vaoManager->createVertexArrayObject( vertexBuffers, indexBuffer,
+                                                   Ogre::OT_TRIANGLE_LIST );
+    }
+    catch( Ogre::Exception &e )
+    {
+        // Whatever succeeded before the throw is still ours: nothing has
+        // taken ownership of these yet, since only a SubMesh does that.
+        if( indexBuffer )
+            vaoManager->destroyIndexBuffer( indexBuffer );
+        if( vertexBuffer )
+            vaoManager->destroyVertexBuffer( vertexBuffer );
+
+        logError( "createMesh could not allocate GPU buffers: " + e.getDescription() );
+        return 0;
+    }
 
     const uint32_t handle = mNextHandle++;
     const Ogre::String meshName = "RhizaMesh_" + Ogre::StringConverter::toString( handle );
@@ -311,16 +439,48 @@ uint32_t Renderer::createMesh( const MeshDesc &desc )
                                      ->createChildSceneNode( Ogre::SCENE_DYNAMIC );
     sceneNode->attachObject( item );
 
-    mSceneNodes[handle] = sceneNode;
+    MeshInstance instance;
+    instance.node = sceneNode;
+    instance.item = item;
+    instance.meshName = meshName;
+    instance.datablockName = meshName + "_Material";
+    mMeshes[handle] = std::move( instance );
+
     return handle;
+}
+
+void Renderer::destroyMesh( uint32_t handle )
+{
+    auto it = mMeshes.find( handle );
+    if( it == mMeshes.end() )
+        return;
+
+    const MeshInstance &instance = it->second;
+
+    // Order matters: the Item has to go before its datablock, so that the
+    // datablock has no renderables still pointing at it when destroyed.
+    mSceneManager->destroyItem( instance.item );
+    mSceneManager->destroySceneNode( instance.node );
+
+    // Removing the mesh resource cascades - ~SubMesh destroys its Vaos and,
+    // through them, the vertex and index buffers. Ogre also handles our
+    // sharing one Vao between VpNormal and VpShadow without double-freeing.
+    Ogre::MeshManager::getSingleton().remove( instance.meshName );
+
+    Ogre::HlmsDatablock *datablock =
+        mRoot->getHlmsManager()->getDatablockNoDefault( instance.datablockName );
+    if( datablock )
+        datablock->getCreator()->destroyDatablock( instance.datablockName );
+
+    mMeshes.erase( it );
 }
 
 void Renderer::setPosition( uint32_t handle, Vec3 position )
 {
-    auto it = mSceneNodes.find( handle );
-    if( it == mSceneNodes.end() )
+    auto it = mMeshes.find( handle );
+    if( it == mMeshes.end() )
         return;
-    it->second->setPosition( position.x, position.y, position.z );
+    it->second.node->setPosition( position.x, position.y, position.z );
 }
 
 Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
@@ -390,8 +550,19 @@ uint32_t Renderer::createLight( const LightDesc &desc )
     }
 
     const uint32_t handle = mNextHandle++;
-    mLightNodes[handle] = node;
+    mLights[handle] = LightInstance{ node, light };
     return handle;
+}
+
+void Renderer::destroyLight( uint32_t handle )
+{
+    auto it = mLights.find( handle );
+    if( it == mLights.end() )
+        return;
+
+    mSceneManager->destroyLight( it->second.light );
+    mSceneManager->destroySceneNode( it->second.node );
+    mLights.erase( it );
 }
 
 void Renderer::setAmbientLight( const Color &skyColor, const Color &groundColor )
@@ -400,6 +571,12 @@ void Renderer::setAmbientLight( const Color &skyColor, const Color &groundColor 
     // bouncing down from the sky and up off the ground.
     mSceneManager->setAmbientLight( toOgre( skyColor ), toOgre( groundColor ),
                                     Ogre::Vector3::UNIT_Y );
+}
+
+void Renderer::setCamera( Vec3 position, Vec3 target )
+{
+    mCamera->setPosition( toOgre( position ) );
+    mCamera->lookAt( toOgre( target ) );
 }
 
 }  // namespace Rhiza

@@ -28,8 +28,7 @@ namespace Rhiza
         }
 
         const NativeWindowHandle handle = mImpl->window.getNativeHandle();
-        if( !mImpl->renderer.initialize( handle, settings.windowTitle, settings.windowWidth,
-                                         settings.windowHeight ) )
+        if( !mImpl->renderer.initialize( handle, settings ) )
         {
             mImpl->window.shutdown();
             mImpl.reset();
@@ -73,6 +72,12 @@ namespace Rhiza
         return handle;
     }
 
+    void RhizaEngine::destroyMesh( SceneNodeHandle handle )
+    {
+        if( mImpl && handle.isValid() )
+            mImpl->renderer.destroyMesh( handle.id );
+    }
+
     void RhizaEngine::setPosition( SceneNodeHandle handle, Vec3 position )
     {
         if( mImpl && handle.isValid() )
@@ -87,10 +92,22 @@ namespace Rhiza
         return handle;
     }
 
+    void RhizaEngine::destroyLight( LightHandle handle )
+    {
+        if( mImpl && handle.isValid() )
+            mImpl->renderer.destroyLight( handle.id );
+    }
+
     void RhizaEngine::setAmbientLight( Color skyColor, Color groundColor )
     {
         if( mImpl )
             mImpl->renderer.setAmbientLight( skyColor, groundColor );
+    }
+
+    void RhizaEngine::setCamera( Vec3 position, Vec3 target )
+    {
+        if( mImpl )
+            mImpl->renderer.setCamera( position, target );
     }
 
 }  // namespace Rhiza

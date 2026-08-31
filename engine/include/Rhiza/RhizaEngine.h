@@ -31,9 +31,14 @@ public:
     // which point the caller's main loop should stop calling tick().
     bool tick();
 
-    // Adds a mesh to the scene and returns a handle to it. The handle stays
-    // valid until shutdown().
+    // Adds a mesh to the scene. Returns an invalid handle if the description
+    // is unusable - empty, not a triangle list, or with indices pointing past
+    // the end of the vertex list - with the reason written to the log.
     SceneNodeHandle createMesh(const MeshDesc &desc);
+
+    // Removes a mesh and frees its GPU buffers and material. The handle is
+    // dead afterwards; passing it to anything else is a harmless no-op.
+    void destroyMesh(SceneNodeHandle handle);
 
     // Moves a previously created mesh. No-op if the handle is invalid.
     void setPosition(SceneNodeHandle handle, Vec3 position);
@@ -42,12 +47,18 @@ public:
     // ShadingModel::Unlit surfaces are unaffected by any light in the scene.
     LightHandle createLight(const LightDesc &desc);
 
+    // Removes a light. No-op if the handle is invalid.
+    void destroyLight(LightHandle handle);
+
     // Sets the light that arrives from every direction at once, standing in
     // for bounced light the renderer doesn't simulate. Without it, surfaces
     // facing away from every light are pure black. Ogre blends between the
     // two colours by how far a surface tilts up toward the sky or down
     // toward the ground.
     void setAmbientLight(Color skyColor, Color groundColor);
+
+    // Moves the camera and aims it. Initial values come from EngineSettings.
+    void setCamera(Vec3 position, Vec3 target);
 
 private:
     struct Impl;

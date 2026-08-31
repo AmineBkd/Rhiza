@@ -12,5 +12,8 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(OgreNext REQUIRED)
 
+enable_testing()
+
 add_subdirectory(engine)
 add_subdirectory(game)
+add_subdirectory(tests)
