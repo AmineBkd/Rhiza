@@ -30,3 +30,11 @@ target_include_directories(ClockTests PRIVATE
 )
 
 add_test(NAME ClockTests COMMAND ClockTests)
+
+# RhizaFramework is header-only and has no SDL/Ogre dependency either, so
+# this runs anywhere too - just a link (for the include path) rather than
+# compiling an engine/src file directly, since there's no .cpp to compile.
+add_executable(RegistryTests RegistryTests.cpp)
+target_link_libraries(RegistryTests PRIVATE RhizaFramework)
+
+add_test(NAME RegistryTests COMMAND RegistryTests)

@@ -15,5 +15,6 @@ find_package(OgreNext REQUIRED)
 enable_testing()
 
 add_subdirectory(engine)
+add_subdirectory(framework)
 add_subdirectory(game)
 add_subdirectory(tests)
