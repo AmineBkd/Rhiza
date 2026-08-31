@@ -65,6 +65,19 @@ constexpr const char *kRenderSystemName = "OpenGL 3+ Rendering Subsystem";
 #    error "Unsupported platform: add its Ogre-Next render system plugin name here."
 #endif
 
+// Ogre-Next's ogre_config_plugin() clears the library prefix on GCC/Clang,
+// so a plugin never carries the leading "lib" that the Unix convention would
+// otherwise give it, and its OGRE_PLUGIN_PATH puts the file somewhere other
+// than beside the regular libraries - differently on each platform:
+//   Windows  <root>/bin/RenderSystem_Direct3D11.dll   (RUNTIME destination)
+//   macOS    <root>/lib/RenderSystem_Metal.dylib      (OGRE_PLUGIN_PATH "/")
+//   Linux    <root>/lib/OGRE-Next/RenderSystem_GL3Plus.so
+//                                        (OGRE_PLUGIN_PATH "/OGRE-Next")
+// Note the Linux plugin is additionally built with RUNPATH "$ORIGIN:$ORIGIN/.."
+// so it can resolve libOgreNextMain and the image/zip dependencies one level
+// up: it has to be loaded from that directory in place, not copied next to
+// the executable.
+//
 // Debug and Release builds load each other's OgreNextMain library if
 // mismatched, so the choice must track how *this* binary itself was built,
 // not what happens to exist on disk - hence RHIZA_DEBUG_BUILD (set
@@ -74,28 +87,25 @@ constexpr const char *kRenderSystemName = "OpenGL 3+ Rendering Subsystem";
 std::string getRenderSystemPluginPath()
 {
 #if defined( _WIN32 )
-    constexpr const char *libPrefix = "";
     constexpr const char *libExtension = ".dll";
-    constexpr const char *runtimeSubdir = "bin";
+    constexpr const char *pluginSubdir = "bin";
 #elif defined( __APPLE__ )
-    constexpr const char *libPrefix = "lib";
     constexpr const char *libExtension = ".dylib";
-    constexpr const char *runtimeSubdir = "lib";
+    constexpr const char *pluginSubdir = "lib";
 #else
-    constexpr const char *libPrefix = "lib";
     constexpr const char *libExtension = ".so";
-    constexpr const char *runtimeSubdir = "lib";
+    constexpr const char *pluginSubdir = "lib/OGRE-Next";
 #endif
 
 #if defined( RHIZA_DEBUG_BUILD )
-    const std::string dir = std::string( "debug/" ) + runtimeSubdir;
+    const std::string dir = std::string( "debug/" ) + pluginSubdir;
     const std::string debugSuffix = "_d";
 #else
-    const std::string dir = runtimeSubdir;
+    const std::string dir = pluginSubdir;
     const std::string debugSuffix;
 #endif
 
-    return std::string( RHIZA_OGRE_INSTALL_ROOT ) + "/" + dir + "/" + libPrefix + kPluginBaseName +
+    return std::string( RHIZA_OGRE_INSTALL_ROOT ) + "/" + dir + "/" + kPluginBaseName +
            debugSuffix + libExtension;
 }
 

@@ -21,8 +21,8 @@ target_include_directories(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 OgreNext::OgreNext)
 
 # Consumed by Renderer.cpp: where this engine's own copy of the Hlms shader
-# templates lives, and where the vcpkg-built OGRE-Next plugin DLLs
-# (RenderSystem_Direct3D11.dll) live. See engine/media/Hlms/ATTRIBUTION.txt
+# templates lives, and the vcpkg triplet install root under which the
+# OGRE-Next render system plugin lives. See engine/media/Hlms/ATTRIBUTION.txt
 # and cmake/FindOgreNext.cmake for why both are needed.
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     RHIZA_MEDIA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/media"

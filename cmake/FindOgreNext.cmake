@@ -100,14 +100,33 @@ if(OgreNext_FOUND AND NOT TARGET OgreNext::OgreNext)
         target_compile_definitions(OgreNext::OgreNext INTERFACE OGRE_STATIC_LIB)
     endif()
 
-    # This build is NOT static: OgreNextMain is a DLL, and RenderSystem_Direct3D11
-    # is a separate plugin DLL that vcpkg installs to <root>/bin (and <root>/debug/bin)
-    # but does NOT expose as a linkable CMake target (it's meant to be loaded at
-    # runtime via Ogre::Root::loadPlugin(), the same way a classic plugins.cfg would).
-    # We derive the triplet's install root here so callers can find that DLL
-    # themselves instead of silently failing to locate it.
+    # This build is NOT static: OgreNextMain is a shared library, and the render
+    # system (Direct3D11 / GL3Plus / Metal, depending on platform) is a separate
+    # plugin that vcpkg installs - to <root>/bin on Windows, to
+    # <root>/lib/OGRE-Next on Unix - but does NOT expose as a linkable CMake
+    # target (it's meant to be loaded at runtime via Ogre::Root::loadPlugin(),
+    # the same way a classic plugins.cfg would). We derive the triplet's install
+    # root here so callers can find that plugin themselves instead of silently
+    # failing to locate it; Renderer.cpp turns the root into the full path.
     get_filename_component(OGRENEXT_INSTALL_ROOT "${OGRENEXT_INCLUDE_DIR}" DIRECTORY)
     get_filename_component(OGRENEXT_INSTALL_ROOT "${OGRENEXT_INSTALL_ROOT}" DIRECTORY)
+
+    # On dynamic Unix triplets, libFreeImage.so (an OgreNext dependency) is
+    # linked against libraw.so, but vcpkg's libraw port deliberately installs
+    # that non-thread-safe variant to lib/manual-link (see
+    # third_party/vcpkg/ports/libraw/fix-install.patch) instead of lib/, so
+    # it's on neither the linker's nor the runtime loader's search path.
+    # MSVC-generator app-local DLL deployment papers over the Windows
+    # equivalent of this, which is why the build only breaks here on Linux.
+    # Mirror it next to the rest of the triplet's shared libs to fix both.
+    if(UNIX)
+        foreach(_ogrenext_libdir "${OGRENEXT_INSTALL_ROOT}/lib" "${OGRENEXT_INSTALL_ROOT}/debug/lib")
+            file(GLOB _ogrenext_manual_libraw "${_ogrenext_libdir}/manual-link/libraw${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+            if(_ogrenext_manual_libraw)
+                file(COPY ${_ogrenext_manual_libraw} DESTINATION "${_ogrenext_libdir}")
+            endif()
+        endforeach()
+    endif()
 endif()
 
 mark_as_advanced(OGRENEXT_INCLUDE_DIR OGRENEXT_LIBRARY_RELEASE OGRENEXT_LIBRARY_DEBUG
