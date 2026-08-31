@@ -79,4 +79,18 @@ namespace Rhiza
             mImpl->renderer.setPosition( handle.id, position );
     }
 
+    LightHandle RhizaEngine::createLight( const LightDesc &desc )
+    {
+        LightHandle handle;
+        if( mImpl )
+            handle.id = mImpl->renderer.createLight( desc );
+        return handle;
+    }
+
+    void RhizaEngine::setAmbientLight( Color skyColor, Color groundColor )
+    {
+        if( mImpl )
+            mImpl->renderer.setAmbientLight( skyColor, groundColor );
+    }
+
 }  // namespace Rhiza

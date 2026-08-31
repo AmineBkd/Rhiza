@@ -38,6 +38,17 @@ public:
     // Moves a previously created mesh. No-op if the handle is invalid.
     void setPosition(SceneNodeHandle handle, Vec3 position);
 
+    // Adds a light. Only materials using ShadingModel::Lit respond to it;
+    // ShadingModel::Unlit surfaces are unaffected by any light in the scene.
+    LightHandle createLight(const LightDesc &desc);
+
+    // Sets the light that arrives from every direction at once, standing in
+    // for bounced light the renderer doesn't simulate. Without it, surfaces
+    // facing away from every light are pure black. Ogre blends between the
+    // two colours by how far a surface tilts up toward the sky or down
+    // toward the ground.
+    void setAmbientLight(Color skyColor, Color groundColor);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> mImpl;

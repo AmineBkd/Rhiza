@@ -4,8 +4,10 @@ add_library(${PROJECT_NAME} STATIC
     src/RhizaEngine.cpp
     src/Window.cpp
     src/Renderer.cpp
+    src/Shapes.cpp
     include/Rhiza/RhizaEngine.h
     include/Rhiza/Types.h
+    include/Rhiza/Shapes.h
     src/NativeWindowHandle.h
     src/Window.h
     src/Renderer.h

@@ -21,13 +21,17 @@ find_library(OGRENEXT_LIBRARY_DEBUG
 )
 select_library_configurations(OGRENEXT)
 
-# HlmsUnlit lives in its own component library (OgreMain does not contain
-# it), same as HlmsPbs would if we needed it. Anything that #includes
-# Hlms/Unlit/OgreHlmsUnlit.h must link this too, or every HlmsUnlit method
+# Each Hlms implementation lives in its own component library (OgreMain does
+# not contain them). Anything that #includes Hlms/Unlit/OgreHlmsUnlit.h or
+# Hlms/Pbs/OgreHlmsPbs.h must link the matching library too, or every method
 # comes back as an unresolved external at link time despite compiling fine.
 find_library(OGRENEXT_HLMSUNLIT_LIBRARY_RELEASE NAMES OgreNextHlmsUnlit)
 find_library(OGRENEXT_HLMSUNLIT_LIBRARY_DEBUG NAMES OgreNextHlmsUnlit_d)
 select_library_configurations(OGRENEXT_HLMSUNLIT)
+
+find_library(OGRENEXT_HLMSPBS_LIBRARY_RELEASE NAMES OgreNextHlmsPbs)
+find_library(OGRENEXT_HLMSPBS_LIBRARY_DEBUG NAMES OgreNextHlmsPbs_d)
+select_library_configurations(OGRENEXT_HLMSPBS)
 
 find_package_handle_standard_args(OgreNext
     REQUIRED_VARS OGRENEXT_LIBRARY OGRENEXT_INCLUDE_DIR
@@ -71,14 +75,21 @@ if(OgreNext_FOUND AND NOT TARGET OgreNext::OgreNext)
         set_target_properties(OgreNext::OgreNext PROPERTIES IMPORTED_LOCATION "${OGRENEXT_LIBRARY}")
     endif()
 
+    # Must go through the target_link_libraries() command (not a direct
+    # set_property on INTERFACE_LINK_LIBRARIES): only the command form
+    # understands the debug/optimized keywords that
+    # select_library_configurations() produces.
     if(OGRENEXT_HLMSUNLIT_LIBRARY)
-        # Must go through the target_link_libraries() command (not a direct
-        # set_property on INTERFACE_LINK_LIBRARIES): only the command form
-        # understands the debug/optimized keywords that
-        # select_library_configurations() produces.
         target_link_libraries(OgreNext::OgreNext INTERFACE
             optimized "${OGRENEXT_HLMSUNLIT_LIBRARY_RELEASE}"
             debug "${OGRENEXT_HLMSUNLIT_LIBRARY_DEBUG}"
+        )
+    endif()
+
+    if(OGRENEXT_HLMSPBS_LIBRARY)
+        target_link_libraries(OgreNext::OgreNext INTERFACE
+            optimized "${OGRENEXT_HLMSPBS_LIBRARY_RELEASE}"
+            debug "${OGRENEXT_HLMSPBS_LIBRARY_DEBUG}"
         )
     endif()
 
@@ -100,4 +111,5 @@ if(OgreNext_FOUND AND NOT TARGET OgreNext::OgreNext)
 endif()
 
 mark_as_advanced(OGRENEXT_INCLUDE_DIR OGRENEXT_LIBRARY_RELEASE OGRENEXT_LIBRARY_DEBUG
-    OGRENEXT_HLMSUNLIT_LIBRARY_RELEASE OGRENEXT_HLMSUNLIT_LIBRARY_DEBUG)
+    OGRENEXT_HLMSUNLIT_LIBRARY_RELEASE OGRENEXT_HLMSUNLIT_LIBRARY_DEBUG
+    OGRENEXT_HLMSPBS_LIBRARY_RELEASE OGRENEXT_HLMSPBS_LIBRARY_DEBUG)

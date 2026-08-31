@@ -16,6 +16,7 @@ class Camera;
 class Window;
 class CompositorWorkspace;
 class SceneNode;
+class HlmsDatablock;
 }  // namespace Ogre
 
 namespace Rhiza
@@ -39,8 +40,19 @@ public:
     uint32_t createMesh( const MeshDesc &desc );
     void setPosition( uint32_t handle, Vec3 position );
 
+    uint32_t createLight( const LightDesc &desc );
+    void setAmbientLight( const Color &skyColor, const Color &groundColor );
+
 private:
-    void registerUnlitHlms();
+    // Registers both Hlms implementations. Both are always registered even
+    // if a project only uses one, because they are how Rhiza expresses 3D
+    // (Pbs) versus 2D (Unlit) and a scene may freely mix them.
+    void registerHlms();
+
+    // Builds the datablock (Ogre's term for a material) matching `material`,
+    // choosing the Pbs or Unlit implementation from its ShadingModel.
+    // `name` must be unique across the whole Hlms manager.
+    Ogre::HlmsDatablock *createDatablock( const std::string &name, const MaterialDesc &material );
 
     Ogre::Root *mRoot = nullptr;
     Ogre::SceneManager *mSceneManager = nullptr;
@@ -48,8 +60,11 @@ private:
     Ogre::Window *mRenderWindow = nullptr;
     Ogre::CompositorWorkspace *mWorkspace = nullptr;
 
+    // Handles are handed out from one counter shared by meshes and lights,
+    // so a handle value is never ambiguous between the two maps.
     uint32_t mNextHandle = 1;
     std::unordered_map<uint32_t, Ogre::SceneNode *> mSceneNodes;
+    std::unordered_map<uint32_t, Ogre::SceneNode *> mLightNodes;
 };
 
 }  // namespace Rhiza

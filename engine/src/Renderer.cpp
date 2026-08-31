@@ -21,8 +21,11 @@
 #include "Compositor/OgreCompositorWorkspace.h"
 #include "Vao/OgreVaoManager.h"
 #include "Vao/OgreVertexArrayObject.h"
+#include "OgreLight.h"
 #include "Hlms/Unlit/OgreHlmsUnlit.h"
 #include "Hlms/Unlit/OgreHlmsUnlitDatablock.h"
+#include "Hlms/Pbs/OgreHlmsPbs.h"
+#include "Hlms/Pbs/OgreHlmsPbsDatablock.h"
 
 // Injected by engine/CMakeLists.txt. RHIZA_MEDIA_DIR is the folder holding
 // this engine's own copy of the Hlms shader templates (see engine/media);
@@ -93,6 +96,24 @@ std::string getRenderSystemPluginPath()
            debugSuffix + libExtension;
 }
 
+// The exact byte layout uploaded to the GPU. Field order must stay in sync
+// with the VertexElement2 declaration in createMesh().
+struct GpuVertex
+{
+    float px, py, pz;
+    float nx, ny, nz;
+};
+
+Ogre::Vector3 toOgre( const Vec3 &v )
+{
+    return Ogre::Vector3( v.x, v.y, v.z );
+}
+
+Ogre::ColourValue toOgre( const Color &c )
+{
+    return Ogre::ColourValue( c.r, c.g, c.b, c.a );
+}
+
 }  // namespace
 
 Renderer::~Renderer()
@@ -127,12 +148,19 @@ bool Renderer::initialize( const NativeWindowHandle &windowHandle, const std::st
     mRenderWindow = mRoot->createRenderWindow( title, static_cast<Ogre::uint32>( width ),
                                                static_cast<Ogre::uint32>( height ), false, &params );
 
-    registerUnlitHlms();
+    registerHlms();
 
     mSceneManager = mRoot->createSceneManager( Ogre::ST_GENERIC, 1, "RhizaSceneManager" );
 
+    // Without any ambient term, surfaces facing away from every light render
+    // pure black. A dim sky/ground pair keeps unlit faces readable; callers
+    // can override it via setAmbientLight().
+    setAmbientLight( Color{ 0.3f, 0.35f, 0.45f, 1.0f }, Color{ 0.15f, 0.14f, 0.13f, 1.0f } );
+
+    // Offset from the axis so a cube shows three faces at three different
+    // brightnesses - straight-on, lighting is much harder to judge.
     mCamera = mSceneManager->createCamera( "MainCamera" );
-    mCamera->setPosition( Ogre::Vector3( 0.0f, 0.0f, 5.0f ) );
+    mCamera->setPosition( Ogre::Vector3( 3.5f, 3.0f, 5.0f ) );
     mCamera->lookAt( Ogre::Vector3::ZERO );
     mCamera->setNearClipDistance( 0.1f );
     mCamera->setFarClipDistance( 1000.0f );
@@ -149,30 +177,47 @@ bool Renderer::initialize( const NativeWindowHandle &windowHandle, const std::st
     return true;
 }
 
-void Renderer::registerUnlitHlms()
+void Renderer::registerHlms()
 {
-    Ogre::String mainFolderPath;
-    Ogre::StringVector libraryFoldersPaths;
-    Ogre::HlmsUnlit::getDefaultPaths( mainFolderPath, libraryFoldersPaths );
-
     Ogre::ArchiveManager &archiveManager = Ogre::ArchiveManager::getSingleton();
     const Ogre::String mediaRoot = std::string( RHIZA_MEDIA_DIR ) + "/";
 
-    Ogre::Archive *mainArchive = archiveManager.load( mediaRoot + mainFolderPath, "FileSystem", true );
+    // Both implementations describe the folders they need to compile their
+    // shaders from, and the paths are relative to our media root. The
+    // folders themselves are vendored in engine/media/Hlms - see the
+    // ATTRIBUTION.txt there for why they aren't supplied by vcpkg.
+    auto loadArchives = [&]( const Ogre::String &mainFolderPath,
+                             const Ogre::StringVector &libraryFoldersPaths,
+                             Ogre::ArchiveVec &outLibraryFolders ) -> Ogre::Archive * {
+        for( const Ogre::String &libPath : libraryFoldersPaths )
+            outLibraryFolders.push_back( archiveManager.load( mediaRoot + libPath, "FileSystem", true ) );
+        return archiveManager.load( mediaRoot + mainFolderPath, "FileSystem", true );
+    };
 
-    Ogre::ArchiveVec libraryFolders;
-    for( const Ogre::String &libPath : libraryFoldersPaths )
-        libraryFolders.push_back( archiveManager.load( mediaRoot + libPath, "FileSystem", true ) );
-
-    Ogre::HlmsUnlit *hlmsUnlit = OGRE_NEW Ogre::HlmsUnlit( mainArchive, &libraryFolders );
     Ogre::HlmsManager *hlmsManager = mRoot->getHlmsManager();
-    hlmsManager->registerHlms( hlmsUnlit );
 
-    // HlmsManager defaults to treating HLMS_PBS as "the" default Hlms - e.g.
-    // for submeshes with no material assigned, which is exactly our
-    // generated meshes. We only register Unlit, so without this,
-    // HlmsManager::getDefaultDatablock() dereferences a null HlmsPbs pointer.
-    hlmsManager->useDefaultDatablockFrom( Ogre::HLMS_UNLIT );
+    Ogre::String mainFolderPath;
+    Ogre::StringVector libraryFoldersPaths;
+
+    {
+        Ogre::HlmsUnlit::getDefaultPaths( mainFolderPath, libraryFoldersPaths );
+        Ogre::ArchiveVec libraryFolders;
+        Ogre::Archive *mainArchive = loadArchives( mainFolderPath, libraryFoldersPaths, libraryFolders );
+        hlmsManager->registerHlms( OGRE_NEW Ogre::HlmsUnlit( mainArchive, &libraryFolders ) );
+    }
+
+    {
+        Ogre::HlmsPbs::getDefaultPaths( mainFolderPath, libraryFoldersPaths );
+        Ogre::ArchiveVec libraryFolders;
+        Ogre::Archive *mainArchive = loadArchives( mainFolderPath, libraryFoldersPaths, libraryFolders );
+        hlmsManager->registerHlms( OGRE_NEW Ogre::HlmsPbs( mainArchive, &libraryFolders ) );
+    }
+
+    // HlmsManager treats HLMS_PBS as the fallback for anything with no
+    // material assigned - which every Item briefly is, in the moment between
+    // createItem() and our setDatablock() call. Registering Pbs above is
+    // what makes that fallback valid; when only Unlit was registered this
+    // null-dereferenced inside HlmsManager::getDefaultDatablock().
 }
 
 void Renderer::shutdown()
@@ -181,6 +226,7 @@ void Renderer::shutdown()
         return;
 
     mSceneNodes.clear();
+    mLightNodes.clear();
 
     if( mWorkspace )
     {
@@ -208,19 +254,24 @@ uint32_t Renderer::createMesh( const MeshDesc &desc )
 {
     Ogre::VaoManager *vaoManager = mRoot->getRenderSystem()->getVaoManager();
 
+    // Position and normal interleaved in one buffer. The declared element
+    // order here must match GpuVertex's field order exactly - Ogre reads the
+    // buffer as raw bytes and trusts this declaration to interpret them.
     Ogre::VertexElement2Vec vertexElements;
     vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_POSITION ) );
+    vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_NORMAL ) );
 
     const size_t numVertices = desc.vertices.size();
-    Ogre::Vector3 *vertexData = reinterpret_cast<Ogre::Vector3 *>(
-        OGRE_MALLOC_SIMD( sizeof( Ogre::Vector3 ) * numVertices, Ogre::MEMCATEGORY_GEOMETRY ) );
+    GpuVertex *vertexData = reinterpret_cast<GpuVertex *>(
+        OGRE_MALLOC_SIMD( sizeof( GpuVertex ) * numVertices, Ogre::MEMCATEGORY_GEOMETRY ) );
 
     Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
     for( size_t i = 0; i < numVertices; ++i )
     {
-        const Vec3 &p = desc.vertices[i].position;
-        vertexData[i] = Ogre::Vector3( p.x, p.y, p.z );
-        bounds.merge( vertexData[i] );
+        const Vertex &v = desc.vertices[i];
+        vertexData[i] = { v.position.x, v.position.y, v.position.z,
+                          v.normal.x,   v.normal.y,   v.normal.z };
+        bounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
     }
 
     Ogre::VertexBufferPacked *vertexBuffer =
@@ -254,25 +305,7 @@ uint32_t Renderer::createMesh( const MeshDesc &desc )
 
     Ogre::Item *item = mSceneManager->createItem( mesh, Ogre::SCENE_DYNAMIC );
 
-    Ogre::Hlms *hlms = mRoot->getHlmsManager()->getHlms( Ogre::HLMS_UNLIT );
-    Ogre::HlmsUnlit *hlmsUnlit = static_cast<Ogre::HlmsUnlit *>( hlms );
-
-    // MeshDesc is a generic "here are some vertices and indices" API with no
-    // documented winding convention, so we can't assume callers give us
-    // triangles wound the way Ogre-Next's default cull mode expects
-    // (CULL_CLOCKWISE keeps only anticlockwise-wound triangles - the exact
-    // opposite of what it sounds like). Disabling culling is the correct
-    // choice for arbitrary caller-supplied geometry, not a workaround.
-    Ogre::HlmsMacroblock macroblock;
-    macroblock.mCullMode = Ogre::CULL_NONE;
-
-    Ogre::HlmsUnlitDatablock *datablock = static_cast<Ogre::HlmsUnlitDatablock *>(
-        hlmsUnlit->createDatablock( meshName + "_Material", meshName + "_Material", macroblock,
-                                    Ogre::HlmsBlendblock(), Ogre::HlmsParamVec() ) );
-    datablock->setUseColour( true );
-    datablock->setColour(
-        Ogre::ColourValue( desc.color.r, desc.color.g, desc.color.b, desc.color.a ) );
-    item->getSubItem( 0 )->setDatablock( datablock );
+    item->getSubItem( 0 )->setDatablock( createDatablock( meshName + "_Material", desc.material ) );
 
     Ogre::SceneNode *sceneNode = mSceneManager->getRootSceneNode( Ogre::SCENE_DYNAMIC )
                                      ->createChildSceneNode( Ogre::SCENE_DYNAMIC );
@@ -288,6 +321,85 @@ void Renderer::setPosition( uint32_t handle, Vec3 position )
     if( it == mSceneNodes.end() )
         return;
     it->second->setPosition( position.x, position.y, position.z );
+}
+
+Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
+                                                const MaterialDesc &material )
+{
+    // Winding order is only trustworthy when the caller promised it, so
+    // culling stays off unless the material opts in. CULL_CLOCKWISE is
+    // Ogre's default and, confusingly, means "keep anticlockwise faces".
+    Ogre::HlmsMacroblock macroblock;
+    macroblock.mCullMode = material.doubleSided ? Ogre::CULL_NONE : Ogre::CULL_CLOCKWISE;
+
+    Ogre::HlmsManager *hlmsManager = mRoot->getHlmsManager();
+
+    if( material.shading == ShadingModel::Unlit )
+    {
+        Ogre::HlmsUnlit *hlmsUnlit =
+            static_cast<Ogre::HlmsUnlit *>( hlmsManager->getHlms( Ogre::HLMS_UNLIT ) );
+
+        Ogre::HlmsUnlitDatablock *datablock =
+            static_cast<Ogre::HlmsUnlitDatablock *>( hlmsUnlit->createDatablock(
+                name, name, macroblock, Ogre::HlmsBlendblock(), Ogre::HlmsParamVec() ) );
+
+        // Unlit ignores its colour entirely unless told to use it.
+        datablock->setUseColour( true );
+        datablock->setColour( toOgre( material.color ) );
+        return datablock;
+    }
+
+    Ogre::HlmsPbs *hlmsPbs = static_cast<Ogre::HlmsPbs *>( hlmsManager->getHlms( Ogre::HLMS_PBS ) );
+
+    Ogre::HlmsPbsDatablock *datablock =
+        static_cast<Ogre::HlmsPbsDatablock *>( hlmsPbs->createDatablock(
+            name, name, macroblock, Ogre::HlmsBlendblock(), Ogre::HlmsParamVec() ) );
+
+    // setMetalness is only respected under the metallic workflow; in the
+    // default specular workflow it is silently ignored.
+    datablock->setWorkflow( Ogre::HlmsPbsDatablock::MetallicWorkflow );
+    datablock->setDiffuse( Ogre::Vector3( material.color.r, material.color.g, material.color.b ) );
+    datablock->setRoughness( material.roughness );
+    datablock->setMetalness( material.metalness );
+    return datablock;
+}
+
+uint32_t Renderer::createLight( const LightDesc &desc )
+{
+    Ogre::Light *light = mSceneManager->createLight();
+    Ogre::SceneNode *node = mSceneManager->getRootSceneNode()->createChildSceneNode();
+    node->attachObject( light );
+
+    light->setDiffuseColour( toOgre( desc.color ) );
+    light->setSpecularColour( toOgre( desc.color ) );
+
+    // Ogre's PBS divides incoming light by PI, which is correct for an HDR
+    // pipeline that later tonemaps. Rhiza renders straight to an LDR target,
+    // so we fold PI back in here and let callers think in plain multiples.
+    light->setPowerScale( desc.power * Ogre::Math::PI );
+
+    if( desc.type == LightType::Directional )
+    {
+        light->setType( Ogre::Light::LT_DIRECTIONAL );
+        light->setDirection( toOgre( desc.direction ).normalisedCopy() );
+    }
+    else
+    {
+        light->setType( Ogre::Light::LT_POINT );
+        node->setPosition( toOgre( desc.position ) );
+    }
+
+    const uint32_t handle = mNextHandle++;
+    mLightNodes[handle] = node;
+    return handle;
+}
+
+void Renderer::setAmbientLight( const Color &skyColor, const Color &groundColor )
+{
+    // Ogre models ambient as two hemispheres blended along an axis: light
+    // bouncing down from the sky and up off the ground.
+    mSceneManager->setAmbientLight( toOgre( skyColor ), toOgre( groundColor ),
+                                    Ogre::Vector3::UNIT_Y );
 }
 
 }  // namespace Rhiza
