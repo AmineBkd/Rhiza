@@ -5,3 +5,4 @@ CMakeCache.txt*
 /build/CMakeFiles
 /.vs/
 /out/
+/Rhiza.log
