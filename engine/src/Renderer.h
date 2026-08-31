@@ -45,8 +45,24 @@ public:
 
     // Returns 0 if the description is unusable or the GPU buffers could not
     // be allocated; the reason is written to the log.
-    uint32_t createMesh( const MeshDesc &desc );
-    void destroyMesh( uint32_t handle );
+    uint32_t createMeshAsset( const MeshDesc &desc );
+
+    // No-op (logged) if `handle` doesn't name a mesh asset created with
+    // MeshDesc::isMutable = true, or the new description is unusable.
+    void updateMesh( uint32_t handle, const MeshDesc &desc );
+
+    // No-op (logged) while any instance still references this asset.
+    void destroyMeshAsset( uint32_t handle );
+
+    uint32_t createMaterial( const MaterialDesc &desc );
+
+    // No-op (logged) while any instance still references this material.
+    void destroyMaterial( uint32_t handle );
+
+    // Returns 0 if either handle is invalid.
+    uint32_t createInstance( uint32_t meshHandle, uint32_t materialHandle );
+    void destroyInstance( uint32_t handle );
+
     void setPosition( uint32_t handle, Vec3 position );
 
     uint32_t createLight( const LightDesc &desc );
@@ -70,15 +86,38 @@ private:
     // `name` must be unique across the whole Hlms manager.
     Ogre::HlmsDatablock *createDatablock( const std::string &name, const MaterialDesc &material );
 
-    // Everything created on behalf of one createMesh call. Tracked together
-    // so destroyMesh can take it all back down without interrogating Ogre
-    // about what is attached to what.
-    struct MeshInstance
+    // Geometry uploaded once via createMeshAsset, instantiated any number of
+    // times via createInstance. Tracked by name rather than an Ogre::MeshPtr
+    // so Renderer.h doesn't need Ogre's mesh headers - see the layer rule in
+    // ARCHITECTURE.md.
+    struct MeshAsset
+    {
+        std::string name;
+        bool isMutable = false;
+
+        // How many live instances reference this asset. destroyMeshAsset
+        // refuses (and logs) while this is nonzero - dropping the asset out
+        // from under a still-attached Item would leave it pointing at a
+        // freed mesh.
+        uint32_t instanceRefCount = 0;
+    };
+
+    struct MaterialAsset
+    {
+        Ogre::HlmsDatablock *datablock = nullptr;
+        uint32_t instanceRefCount = 0;
+    };
+
+    // One placed copy of a mesh asset, shaded with a material. Tracked
+    // together with which asset/material it references so destroyInstance
+    // can decrement their ref-counts, and updateMesh can find every Item
+    // that needs telling its mesh's geometry changed.
+    struct Instance
     {
         Ogre::SceneNode *node = nullptr;
         Ogre::Item *item = nullptr;
-        std::string meshName;
-        std::string datablockName;
+        uint32_t meshAssetHandle = 0;
+        uint32_t materialHandle = 0;
     };
 
     struct LightInstance
@@ -93,10 +132,12 @@ private:
     Ogre::Window *mRenderWindow = nullptr;
     Ogre::CompositorWorkspace *mWorkspace = nullptr;
 
-    // Handles are handed out from one counter shared by meshes and lights,
-    // so a handle value is never ambiguous between the two maps.
+    // Handles are handed out from one counter shared across every map
+    // below, so a handle value is never ambiguous between them.
     uint32_t mNextHandle = 1;
-    std::unordered_map<uint32_t, MeshInstance> mMeshes;
+    std::unordered_map<uint32_t, MeshAsset> mMeshAssets;
+    std::unordered_map<uint32_t, MaterialAsset> mMaterials;
+    std::unordered_map<uint32_t, Instance> mInstances;
     std::unordered_map<uint32_t, LightInstance> mLights;
 };
 

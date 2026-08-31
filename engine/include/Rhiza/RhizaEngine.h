@@ -31,14 +31,39 @@ public:
     // which point the caller's main loop should stop calling tick().
     bool tick();
 
-    // Adds a mesh to the scene. Returns an invalid handle if the description
-    // is unusable - empty, not a triangle list, or with indices pointing past
-    // the end of the vertex list - with the reason written to the log.
-    SceneNodeHandle createMesh(const MeshDesc &desc);
+    // Uploads geometry to the GPU once. Returns an invalid handle if the
+    // description is unusable - empty, not a triangle list, or with indices
+    // pointing past the end of the vertex list - with the reason written to
+    // the log. Instantiate any number of times via createInstance() without
+    // re-uploading - the point of keeping "what the geometry is" separate
+    // from "where one copy of it sits in the scene".
+    MeshHandle createMeshAsset(const MeshDesc &desc);
 
-    // Removes a mesh and frees its GPU buffers and material. The handle is
-    // dead afterwards; passing it to anything else is a harmless no-op.
-    void destroyMesh(SceneNodeHandle handle);
+    // Re-uploads a mesh asset's geometry. No-op (logged) if `mesh` is
+    // invalid or wasn't created with MeshDesc::isMutable = true. Every
+    // instance referencing this asset picks up the new geometry immediately
+    // - there is nothing to update per-instance.
+    void updateMesh(MeshHandle mesh, const MeshDesc &desc);
+
+    // Frees a mesh asset's GPU buffers. No-op (logged) while any instance
+    // still references it - call destroyInstance on those first.
+    void destroyMeshAsset(MeshHandle mesh);
+
+    // Creates a material (Ogre's "datablock"). Shared the same way a mesh
+    // asset is: any number of instances can reference one MaterialHandle.
+    MaterialHandle createMaterial(const MaterialDesc &desc);
+
+    // Frees a material. No-op (logged) while any instance still references
+    // it.
+    void destroyMaterial(MaterialHandle material);
+
+    // Places one instance of `mesh`, shaded with `material`, in the scene.
+    // Returns an invalid handle if either input is invalid.
+    SceneNodeHandle createInstance(MeshHandle mesh, MaterialHandle material);
+
+    // Removes an instance. No-op if the handle is invalid. Its mesh asset
+    // and material are untouched and may still be referenced by others.
+    void destroyInstance(SceneNodeHandle instance);
 
     // Moves a previously created mesh. No-op if the handle is invalid.
     void setPosition(SceneNodeHandle handle, Vec3 position);

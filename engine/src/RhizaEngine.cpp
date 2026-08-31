@@ -73,18 +73,52 @@ namespace Rhiza
         return true;
     }
 
-    SceneNodeHandle RhizaEngine::createMesh( const MeshDesc &desc )
+    MeshHandle RhizaEngine::createMeshAsset( const MeshDesc &desc )
     {
-        SceneNodeHandle handle;
+        MeshHandle handle;
         if( mImpl )
-            handle.id = mImpl->renderer.createMesh( desc );
+            handle.id = mImpl->renderer.createMeshAsset( desc );
         return handle;
     }
 
-    void RhizaEngine::destroyMesh( SceneNodeHandle handle )
+    void RhizaEngine::updateMesh( MeshHandle mesh, const MeshDesc &desc )
     {
-        if( mImpl && handle.isValid() )
-            mImpl->renderer.destroyMesh( handle.id );
+        if( mImpl && mesh.isValid() )
+            mImpl->renderer.updateMesh( mesh.id, desc );
+    }
+
+    void RhizaEngine::destroyMeshAsset( MeshHandle mesh )
+    {
+        if( mImpl && mesh.isValid() )
+            mImpl->renderer.destroyMeshAsset( mesh.id );
+    }
+
+    MaterialHandle RhizaEngine::createMaterial( const MaterialDesc &desc )
+    {
+        MaterialHandle handle;
+        if( mImpl )
+            handle.id = mImpl->renderer.createMaterial( desc );
+        return handle;
+    }
+
+    void RhizaEngine::destroyMaterial( MaterialHandle material )
+    {
+        if( mImpl && material.isValid() )
+            mImpl->renderer.destroyMaterial( material.id );
+    }
+
+    SceneNodeHandle RhizaEngine::createInstance( MeshHandle mesh, MaterialHandle material )
+    {
+        SceneNodeHandle handle;
+        if( mImpl && mesh.isValid() && material.isValid() )
+            handle.id = mImpl->renderer.createInstance( mesh.id, material.id );
+        return handle;
+    }
+
+    void RhizaEngine::destroyInstance( SceneNodeHandle instance )
+    {
+        if( mImpl && instance.isValid() )
+            mImpl->renderer.destroyInstance( instance.id );
     }
 
     void RhizaEngine::setPosition( SceneNodeHandle handle, Vec3 position )

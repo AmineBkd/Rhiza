@@ -110,7 +110,7 @@ std::string getRenderSystemPluginPath()
 }
 
 // The exact byte layout uploaded to the GPU. Field order must stay in sync
-// with the VertexElement2 declaration in createMesh().
+// with the VertexElement2 declaration in buildVao().
 struct GpuVertex
 {
     float px, py, pz;
@@ -182,6 +182,81 @@ std::string describeProblem( const MeshDesc &desc )
     }
 
     return {};
+}
+
+// Builds the position+normal interleaved Vao described by `desc`, with the
+// given buffer type - BT_IMMUTABLE for static assets, BT_DEFAULT for mutable
+// ones (see MeshDesc::isMutable). Shared by createMeshAsset and updateMesh's
+// rebuild path so the two can't drift apart on element layout. Throws
+// Ogre::Exception on allocation failure, same as the buffer calls it wraps;
+// callers own their own try/catch and log message.
+Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoManager,
+                                   Ogre::BufferType bufferType, Ogre::Aabb &outBounds )
+{
+    // Position and normal interleaved in one buffer. The declared element
+    // order here must match GpuVertex's field order exactly - Ogre reads the
+    // buffer as raw bytes and trusts this declaration to interpret them.
+    Ogre::VertexElement2Vec vertexElements;
+    vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_POSITION ) );
+    vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_NORMAL ) );
+
+    const size_t numVertices = desc.vertices.size();
+    const size_t numIndices = desc.indices.size();
+
+    SimdArray<GpuVertex> vertexData( numVertices );
+    outBounds = Ogre::Aabb::BOX_NULL;
+    for( size_t i = 0; i < numVertices; ++i )
+    {
+        const Vertex &v = desc.vertices[i];
+        vertexData[i] = { v.position.x, v.position.y, v.position.z,
+                          v.normal.x,   v.normal.y,   v.normal.z };
+        outBounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
+    }
+
+    SimdArray<Ogre::uint16> indexData( numIndices );
+    std::memcpy( indexData.get(), desc.indices.data(), sizeof( Ogre::uint16 ) * numIndices );
+
+    Ogre::VertexBufferPacked *vertexBuffer = nullptr;
+    Ogre::IndexBufferPacked *indexBuffer = nullptr;
+    try
+    {
+        vertexBuffer = vaoManager->createVertexBuffer( vertexElements, numVertices, bufferType,
+                                                       vertexData.get(), true );
+        vertexData.release();
+
+        indexBuffer = vaoManager->createIndexBuffer( Ogre::IndexBufferPacked::IT_16BIT, numIndices,
+                                                     bufferType, indexData.get(), true );
+        indexData.release();
+
+        Ogre::VertexBufferPackedVec vertexBuffers;
+        vertexBuffers.push_back( vertexBuffer );
+        return vaoManager->createVertexArrayObject( vertexBuffers, indexBuffer,
+                                                     Ogre::OT_TRIANGLE_LIST );
+    }
+    catch( Ogre::Exception & )
+    {
+        // Whatever succeeded before the throw is still ours: nothing has
+        // taken ownership of these yet, since only a SubMesh's Vao does.
+        if( indexBuffer )
+            vaoManager->destroyIndexBuffer( indexBuffer );
+        if( vertexBuffer )
+            vaoManager->destroyVertexBuffer( vertexBuffer );
+        throw;
+    }
+}
+
+// The inverse of buildVao: frees a Vao and the buffers behind it. Used by
+// updateMesh's rebuild path to drop the old geometry before building the new.
+void destroyVao( Ogre::VertexArrayObject *vao, Ogre::VaoManager *vaoManager )
+{
+    Ogre::IndexBufferPacked *indexBuffer = vao->getIndexBuffer();
+    const Ogre::VertexBufferPackedVec vertexBuffers = vao->getVertexBuffers();
+
+    vaoManager->destroyVertexArrayObject( vao );
+    if( indexBuffer )
+        vaoManager->destroyIndexBuffer( indexBuffer );
+    for( Ogre::VertexBufferPacked *vertexBuffer : vertexBuffers )
+        vaoManager->destroyVertexBuffer( vertexBuffer );
 }
 
 // Ogre's log is the one place these messages are useful, but it only exists
@@ -337,9 +412,12 @@ void Renderer::shutdown()
     if( !mRoot )
         return;
 
-    // Ogre::Root's destructor tears down the scene manager and everything
-    // in it, so these only need forgetting, not individually destroying.
-    mMeshes.clear();
+    // Ogre::Root's destructor tears down the scene manager, the mesh and
+    // Hlms managers, and everything in them, so these only need forgetting,
+    // not individually destroying.
+    mMeshAssets.clear();
+    mMaterials.clear();
+    mInstances.clear();
     mLights.clear();
 
     if( mWorkspace )
@@ -364,68 +442,27 @@ void Renderer::renderOneFrame()
     mRoot->renderOneFrame();
 }
 
-uint32_t Renderer::createMesh( const MeshDesc &desc )
+uint32_t Renderer::createMeshAsset( const MeshDesc &desc )
 {
     const std::string problem = describeProblem( desc );
     if( !problem.empty() )
     {
-        logError( "createMesh rejected a mesh because " + problem );
+        logError( "createMeshAsset rejected a mesh because " + problem );
         return 0;
     }
 
     Ogre::VaoManager *vaoManager = mRoot->getRenderSystem()->getVaoManager();
+    const Ogre::BufferType bufferType = desc.isMutable ? Ogre::BT_DEFAULT : Ogre::BT_IMMUTABLE;
 
-    // Position and normal interleaved in one buffer. The declared element
-    // order here must match GpuVertex's field order exactly - Ogre reads the
-    // buffer as raw bytes and trusts this declaration to interpret them.
-    Ogre::VertexElement2Vec vertexElements;
-    vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_POSITION ) );
-    vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_NORMAL ) );
-
-    const size_t numVertices = desc.vertices.size();
-    const size_t numIndices = desc.indices.size();
-
-    SimdArray<GpuVertex> vertexData( numVertices );
-    Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
-    for( size_t i = 0; i < numVertices; ++i )
-    {
-        const Vertex &v = desc.vertices[i];
-        vertexData[i] = { v.position.x, v.position.y, v.position.z,
-                          v.normal.x,   v.normal.y,   v.normal.z };
-        bounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
-    }
-
-    SimdArray<Ogre::uint16> indexData( numIndices );
-    std::memcpy( indexData.get(), desc.indices.data(), sizeof( Ogre::uint16 ) * numIndices );
-
-    Ogre::VertexBufferPacked *vertexBuffer = nullptr;
-    Ogre::IndexBufferPacked *indexBuffer = nullptr;
     Ogre::VertexArrayObject *vao = nullptr;
+    Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
     try
     {
-        vertexBuffer = vaoManager->createVertexBuffer( vertexElements, numVertices,
-                                                       Ogre::BT_IMMUTABLE, vertexData.get(), true );
-        vertexData.release();
-
-        indexBuffer = vaoManager->createIndexBuffer( Ogre::IndexBufferPacked::IT_16BIT, numIndices,
-                                                     Ogre::BT_IMMUTABLE, indexData.get(), true );
-        indexData.release();
-
-        Ogre::VertexBufferPackedVec vertexBuffers;
-        vertexBuffers.push_back( vertexBuffer );
-        vao = vaoManager->createVertexArrayObject( vertexBuffers, indexBuffer,
-                                                   Ogre::OT_TRIANGLE_LIST );
+        vao = buildVao( desc, vaoManager, bufferType, bounds );
     }
     catch( Ogre::Exception &e )
     {
-        // Whatever succeeded before the throw is still ours: nothing has
-        // taken ownership of these yet, since only a SubMesh does that.
-        if( indexBuffer )
-            vaoManager->destroyIndexBuffer( indexBuffer );
-        if( vertexBuffer )
-            vaoManager->destroyVertexBuffer( vertexBuffer );
-
-        logError( "createMesh could not allocate GPU buffers: " + e.getDescription() );
+        logError( "createMeshAsset could not allocate GPU buffers: " + e.getDescription() );
         return 0;
     }
 
@@ -441,54 +478,224 @@ uint32_t Renderer::createMesh( const MeshDesc &desc )
     mesh->_setBounds( bounds, false );
     mesh->_setBoundingSphereRadius( bounds.getRadius() );
 
-    Ogre::Item *item = mSceneManager->createItem( mesh, Ogre::SCENE_DYNAMIC );
+    MeshAsset asset;
+    asset.name = meshName;
+    asset.isMutable = desc.isMutable;
+    mMeshAssets[handle] = std::move( asset );
 
-    item->getSubItem( 0 )->setDatablock( createDatablock( meshName + "_Material", desc.material ) );
+    return handle;
+}
+
+void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
+{
+    auto it = mMeshAssets.find( handle );
+    if( it == mMeshAssets.end() )
+    {
+        logError( "updateMesh given a mesh handle that does not exist" );
+        return;
+    }
+
+    MeshAsset &asset = it->second;
+    if( !asset.isMutable )
+    {
+        logError( "updateMesh called on '" + asset.name +
+                  "', which was not created with MeshDesc::isMutable" );
+        return;
+    }
+
+    const std::string problem = describeProblem( desc );
+    if( !problem.empty() )
+    {
+        logError( "updateMesh rejected new geometry for '" + asset.name + "' because " + problem );
+        return;
+    }
+
+    Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().getByName(
+        asset.name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
+    Ogre::SubMesh *subMesh = mesh->getSubMesh( 0 );
+    Ogre::VertexArrayObject *oldVao = subMesh->mVao[Ogre::VpNormal][0];
+    Ogre::VaoManager *vaoManager = mRoot->getRenderSystem()->getVaoManager();
+
+    // Same vertex and index counts as before: the existing buffers already
+    // have room, so this is a plain re-upload with no GPU allocation - the
+    // fast, common path for geometry that moves or deforms without changing
+    // topology.
+    const Ogre::VertexBufferPackedVec &vertexBuffers = oldVao->getVertexBuffers();
+    const bool sameSize = vertexBuffers.size() == 1 &&
+                          vertexBuffers[0]->getNumElements() == desc.vertices.size() &&
+                          oldVao->getIndexBuffer() != nullptr &&
+                          oldVao->getIndexBuffer()->getNumElements() == desc.indices.size();
+
+    if( sameSize )
+    {
+        std::vector<GpuVertex> vertexData( desc.vertices.size() );
+        for( size_t i = 0; i < desc.vertices.size(); ++i )
+        {
+            const Vertex &v = desc.vertices[i];
+            vertexData[i] = { v.position.x, v.position.y, v.position.z,
+                              v.normal.x,   v.normal.y,   v.normal.z };
+        }
+        vertexBuffers[0]->upload( vertexData.data(), 0, vertexData.size() );
+        oldVao->getIndexBuffer()->upload( desc.indices.data(), 0, desc.indices.size() );
+
+        Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
+        for( const Vertex &v : desc.vertices )
+            bounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
+        mesh->_setBounds( bounds, false );
+        mesh->_setBoundingSphereRadius( bounds.getRadius() );
+    }
+    else
+    {
+        // Topology changed - the existing buffers are the wrong size and
+        // there is no partial-upload path for that, so replace them
+        // outright. This is what Expansum's voxel destruction hits every
+        // time a cell removal changes the ship's vertex/index counts.
+        Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
+        Ogre::VertexArrayObject *newVao = nullptr;
+        try
+        {
+            newVao = buildVao( desc, vaoManager, Ogre::BT_DEFAULT, bounds );
+        }
+        catch( Ogre::Exception &e )
+        {
+            logError( "updateMesh could not allocate GPU buffers for '" + asset.name +
+                      "': " + e.getDescription() );
+            return;
+        }
+
+        destroyVao( oldVao, vaoManager );
+        subMesh->mVao[Ogre::VpNormal][0] = newVao;
+        subMesh->mVao[Ogre::VpShadow][0] = newVao;
+        mesh->_setBounds( bounds, false );
+        mesh->_setBoundingSphereRadius( bounds.getRadius() );
+    }
+
+    // Every Item built from this Mesh cached its own copy of the Vao at
+    // creation time and has no idea it just changed underneath it.
+    // _initialise(true) is Ogre-Next's documented way to force that rebuild
+    // ("useful if you changed the content of a Mesh ... at runtime").
+    for( auto &instanceEntry : mInstances )
+    {
+        if( instanceEntry.second.meshAssetHandle == handle )
+            instanceEntry.second.item->_initialise( true );
+    }
+}
+
+void Renderer::destroyMeshAsset( uint32_t handle )
+{
+    auto it = mMeshAssets.find( handle );
+    if( it == mMeshAssets.end() )
+        return;
+
+    if( it->second.instanceRefCount != 0 )
+    {
+        logError( "destroyMeshAsset refused: '" + it->second.name + "' still has " +
+                  std::to_string( it->second.instanceRefCount ) + " instance(s) referencing it" );
+        return;
+    }
+
+    // Removing the mesh resource cascades - ~SubMesh destroys its Vaos and,
+    // through them, the vertex and index buffers. Ogre also handles our
+    // sharing one Vao between VpNormal and VpShadow without double-freeing.
+    Ogre::MeshManager::getSingleton().remove( it->second.name );
+    mMeshAssets.erase( it );
+}
+
+uint32_t Renderer::createMaterial( const MaterialDesc &desc )
+{
+    const uint32_t handle = mNextHandle++;
+    const Ogre::String name = "RhizaMaterial_" + Ogre::StringConverter::toString( handle );
+
+    MaterialAsset asset;
+    asset.datablock = createDatablock( name, desc );
+    mMaterials[handle] = asset;
+
+    return handle;
+}
+
+void Renderer::destroyMaterial( uint32_t handle )
+{
+    auto it = mMaterials.find( handle );
+    if( it == mMaterials.end() )
+        return;
+
+    if( it->second.instanceRefCount != 0 )
+    {
+        logError( "destroyMaterial refused: still has " +
+                  std::to_string( it->second.instanceRefCount ) + " instance(s) referencing it" );
+        return;
+    }
+
+    Ogre::HlmsDatablock *datablock = it->second.datablock;
+    datablock->getCreator()->destroyDatablock( datablock->getName() );
+    mMaterials.erase( it );
+}
+
+uint32_t Renderer::createInstance( uint32_t meshHandle, uint32_t materialHandle )
+{
+    auto meshIt = mMeshAssets.find( meshHandle );
+    if( meshIt == mMeshAssets.end() )
+    {
+        logError( "createInstance given a mesh handle that does not exist" );
+        return 0;
+    }
+    auto materialIt = mMaterials.find( materialHandle );
+    if( materialIt == mMaterials.end() )
+    {
+        logError( "createInstance given a material handle that does not exist" );
+        return 0;
+    }
+
+    Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().getByName(
+        meshIt->second.name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
+
+    Ogre::Item *item = mSceneManager->createItem( mesh, Ogre::SCENE_DYNAMIC );
+    item->getSubItem( 0 )->setDatablock( materialIt->second.datablock );
 
     Ogre::SceneNode *sceneNode = mSceneManager->getRootSceneNode( Ogre::SCENE_DYNAMIC )
                                      ->createChildSceneNode( Ogre::SCENE_DYNAMIC );
     sceneNode->attachObject( item );
 
-    MeshInstance instance;
+    const uint32_t handle = mNextHandle++;
+    Instance instance;
     instance.node = sceneNode;
     instance.item = item;
-    instance.meshName = meshName;
-    instance.datablockName = meshName + "_Material";
-    mMeshes[handle] = std::move( instance );
+    instance.meshAssetHandle = meshHandle;
+    instance.materialHandle = materialHandle;
+    mInstances[handle] = instance;
+
+    ++meshIt->second.instanceRefCount;
+    ++materialIt->second.instanceRefCount;
 
     return handle;
 }
 
-void Renderer::destroyMesh( uint32_t handle )
+void Renderer::destroyInstance( uint32_t handle )
 {
-    auto it = mMeshes.find( handle );
-    if( it == mMeshes.end() )
+    auto it = mInstances.find( handle );
+    if( it == mInstances.end() )
         return;
 
-    const MeshInstance &instance = it->second;
+    const Instance &instance = it->second;
 
-    // Order matters: the Item has to go before its datablock, so that the
-    // datablock has no renderables still pointing at it when destroyed.
     mSceneManager->destroyItem( instance.item );
     mSceneManager->destroySceneNode( instance.node );
 
-    // Removing the mesh resource cascades - ~SubMesh destroys its Vaos and,
-    // through them, the vertex and index buffers. Ogre also handles our
-    // sharing one Vao between VpNormal and VpShadow without double-freeing.
-    Ogre::MeshManager::getSingleton().remove( instance.meshName );
+    auto meshIt = mMeshAssets.find( instance.meshAssetHandle );
+    if( meshIt != mMeshAssets.end() )
+        --meshIt->second.instanceRefCount;
 
-    Ogre::HlmsDatablock *datablock =
-        mRoot->getHlmsManager()->getDatablockNoDefault( instance.datablockName );
-    if( datablock )
-        datablock->getCreator()->destroyDatablock( instance.datablockName );
+    auto materialIt = mMaterials.find( instance.materialHandle );
+    if( materialIt != mMaterials.end() )
+        --materialIt->second.instanceRefCount;
 
-    mMeshes.erase( it );
+    mInstances.erase( it );
 }
 
 void Renderer::setPosition( uint32_t handle, Vec3 position )
 {
-    auto it = mMeshes.find( handle );
-    if( it == mMeshes.end() )
+    auto it = mInstances.find( handle );
+    if( it == mInstances.end() )
         return;
     it->second.node->setPosition( position.x, position.y, position.z );
 }

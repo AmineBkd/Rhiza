@@ -68,13 +68,25 @@ struct MaterialDesc
     bool doubleSided = true;
 };
 
-// A plain-data description of a mesh, built entirely from primitive types so
-// callers never need to know Ogre's vertex/index buffer types exist.
+// A plain-data description of a mesh's geometry, built entirely from
+// primitive types so callers never need to know Ogre's vertex/index buffer
+// types exist. Deliberately carries no material - a mesh asset is pure
+// geometry, shareable across any number of instances with different
+// materials (or the same one), which is the entire point of separating
+// createMeshAsset from createInstance.
 struct MeshDesc
 {
     std::vector<Vertex> vertices;
     std::vector<uint16_t> indices;
-    MaterialDesc material;
+
+    // Static geometry uploads as GPU-read-only (Ogre's BT_IMMUTABLE), which
+    // is cheaper but permanently locks the buffer. Destructible geometry -
+    // Expansum's voxel ship cells regenerating their mesh every time a cell
+    // is destroyed - needs to call updateMesh() after creation, which only
+    // a mesh asset created with isMutable = true allows. Static is the
+    // default: most meshes never change after creation, and the cost of
+    // mutability is opt-in only when it's actually needed.
+    bool isMutable = false;
 };
 
 enum class LightType
@@ -114,6 +126,25 @@ struct SceneNodeHandle
 };
 
 struct LightHandle
+{
+    uint32_t id = 0;
+
+    bool isValid() const { return id != 0; }
+};
+
+// Identifies one uploaded mesh asset (geometry only, no material) - the
+// result of createMeshAsset. Passed to createInstance to place a copy of it
+// in the scene, and to updateMesh to change its geometry in place.
+struct MeshHandle
+{
+    uint32_t id = 0;
+
+    bool isValid() const { return id != 0; }
+};
+
+// Identifies one material (Ogre's "datablock") - the result of
+// createMaterial. Passed to createInstance alongside a MeshHandle.
+struct MaterialHandle
 {
     uint32_t id = 0;
 
