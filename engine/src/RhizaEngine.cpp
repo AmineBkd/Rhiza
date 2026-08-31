@@ -1,4 +1,5 @@
 #include <Rhiza/RhizaEngine.h>
+#include "Input.h"
 #include "Renderer.h"
 #include "Window.h"
 
@@ -8,6 +9,7 @@ namespace Rhiza
     {
         Window window;
         Renderer renderer;
+        Input input;
         bool running = false;
     };
 
@@ -54,7 +56,7 @@ namespace Rhiza
         if( !mImpl || !mImpl->running )
             return false;
 
-        if( !mImpl->window.pollEvents() )
+        if( !mImpl->window.pollEvents( mImpl->input ) )
         {
             mImpl->running = false;
             return false;
@@ -108,6 +110,21 @@ namespace Rhiza
     {
         if( mImpl )
             mImpl->renderer.setCamera( position, target );
+    }
+
+    bool RhizaEngine::isKeyDown( Key key ) const
+    {
+        return mImpl && mImpl->input.isKeyDown( key );
+    }
+
+    bool RhizaEngine::wasKeyPressed( Key key ) const
+    {
+        return mImpl && mImpl->input.wasKeyPressed( key );
+    }
+
+    bool RhizaEngine::wasKeyReleased( Key key ) const
+    {
+        return mImpl && mImpl->input.wasKeyReleased( key );
     }
 
 }  // namespace Rhiza

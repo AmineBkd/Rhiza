@@ -120,6 +120,38 @@ struct LightHandle
     bool isValid() const { return id != 0; }
 };
 
+// A physical key, identified by its position on the keyboard rather than
+// what it types - the same key is Key::W whether the layout is QWERTY or
+// AZERTY. That's the right identity for gameplay bindings (WASD stays where
+// your fingers expect it); it is the wrong one for "show the user which key
+// to press" UI, which needs the layout-dependent character instead. Rhiza
+// doesn't need that yet, so it isn't here.
+//
+// Deliberately not the full keyboard: this covers what a 2D action game
+// binds today (movement, arrows, the usual modifiers). Extending it is a
+// one-line addition here plus one in Window.cpp's translation table.
+enum class Key
+{
+    Unknown = 0,
+
+    A, B, C, D, E, F, G, H, I, J, K, L, M,
+    N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+
+    Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
+
+    Up, Down, Left, Right,
+
+    Space, Return, Escape, Tab, Backspace,
+
+    LeftShift, RightShift,
+    LeftCtrl, RightCtrl,
+    LeftAlt, RightAlt,
+
+    // Not a real key - marks how many are tracked, so Input can size its
+    // storage from this instead of a hand-maintained count going stale.
+    Count
+};
+
 struct EngineSettings
 {
     const char *windowTitle = "Rhiza";

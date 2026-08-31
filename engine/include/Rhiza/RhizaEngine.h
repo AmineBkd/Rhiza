@@ -60,6 +60,17 @@ public:
     // Moves the camera and aims it. Initial values come from EngineSettings.
     void setCamera(Vec3 position, Vec3 target);
 
+    // Whether `key` is held down right now. Keys are identified by physical
+    // position - see the Key comment in Types.h.
+    bool isKeyDown(Key key) const;
+
+    // True only on the frame `key` went from up to down. Holding the key
+    // does not repeat this - use isKeyDown for that.
+    bool wasKeyPressed(Key key) const;
+
+    // True only on the frame `key` went from down to up.
+    bool wasKeyReleased(Key key) const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> mImpl;

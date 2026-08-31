@@ -5,12 +5,14 @@ add_library(${PROJECT_NAME} STATIC
     src/Window.cpp
     src/Renderer.cpp
     src/Shapes.cpp
+    src/Input.cpp
     include/Rhiza/RhizaEngine.h
     include/Rhiza/Types.h
     include/Rhiza/Shapes.h
     src/NativeWindowHandle.h
     src/Window.h
     src/Renderer.h
+    src/Input.h
 )
 
 target_include_directories(${PROJECT_NAME}
