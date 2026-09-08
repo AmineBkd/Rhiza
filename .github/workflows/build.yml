@@ -33,7 +33,7 @@ jobs:
             build-essential pkg-config \
             libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev \
             libxinerama-dev libxcursor-dev libxi-dev libxaw7-dev \
-            autoconf autoconf-archive automake libtool
+            autoconf autoconf-archive automake libtool libltdl-dev
 
       - name: Bootstrap vcpkg (Windows)
         if: runner.os == 'Windows'
