@@ -25,9 +25,21 @@ public:
     // Safe to call more than once; the destructor calls it too.
     void shutdown();
 
-    // Pumps events and renders one frame. False once the user has asked to
-    // close the window, at which point the caller's loop should stop.
-    bool tick();
+    // Starts a frame: advances the clock, then pumps window and input
+    // events. False once the user has asked to close the window - stop the
+    // loop without calling endFrame().
+    bool beginFrame();
+
+    // Renders the frame. Call once per successful beginFrame(), after game
+    // code has finished mutating the scene - anything changed after this
+    // lands on screen a frame late.
+    //
+    //   while( engine.beginFrame() )
+    //   {
+    //       ... update the world ...
+    //       engine.endFrame();
+    //   }
+    void endFrame();
 
     // Uploads geometry once; place copies with createInstance(). Invalid
     // handle if the description is unusable - empty, not a triangle list, or
@@ -75,7 +87,7 @@ public:
     // deltaSeconds drives gameplay and in-world animation - this is what
     // hitstop freezes. unscaledDeltaSeconds drives input, UI and anything
     // else that must keep moving through one. Both zero before the first
-    // tick(). timeScale: 1 = normal, 0 = frozen, negative = running backward.
+    // beginFrame(). timeScale: 1 = normal, 0 = frozen, negative = backward.
     float deltaSeconds() const;
     float unscaledDeltaSeconds() const;
     float timeScale() const;

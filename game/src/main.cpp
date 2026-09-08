@@ -50,7 +50,7 @@ int main( int argc, char *argv[] )
     Rhiza::Vec3 cameraPosition = settings.cameraPosition;
     Rhiza::Vec3 cameraTarget = settings.cameraTarget;
 
-    while( engine.tick() )
+    while( engine.beginFrame() )
     {
         // WASD pans the camera, arrows move the unlit cube. Both scale by
         // deltaSeconds, so speed is the same at any frame rate.
@@ -89,6 +89,10 @@ int main( int argc, char *argv[] )
         if( engine.isKeyDown( Rhiza::Key::Down ) )
             flatPosition.z += step;
         engine.setPosition( flat, flatPosition );
+
+        // Everything above ran before the draw, so this frame's input is on
+        // screen this frame.
+        engine.endFrame();
     }
 
     return 0;

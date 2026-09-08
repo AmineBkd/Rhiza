@@ -1,5 +1,4 @@
 #include "Clock.h"
-
 #include <algorithm>
 
 namespace Rhiza
@@ -12,7 +11,6 @@ void Clock::tick()
     const auto now = std::chrono::steady_clock::now();
     const float elapsed = std::chrono::duration<float>( now - mLastTick ).count();
     mLastTick = now;
-
     mRealDeltaSeconds = std::min( elapsed, kMaxRealDeltaSeconds );
 }
 

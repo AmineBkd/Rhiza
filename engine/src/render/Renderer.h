@@ -6,7 +6,7 @@
 
 #include <Rhiza/Types.h>
 
-#include "NativeWindowHandle.h"
+#include "core/NativeWindowHandle.h"
 
 namespace Ogre
 {

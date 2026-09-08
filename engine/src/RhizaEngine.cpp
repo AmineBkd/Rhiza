@@ -1,8 +1,8 @@
 #include <Rhiza/RhizaEngine.h>
-#include "Clock.h"
-#include "Input.h"
-#include "Renderer.h"
-#include "Window.h"
+#include "core/Clock.h"
+#include "platform/Input.h"
+#include "render/Renderer.h"
+#include "platform/Window.h"
 
 namespace Rhiza
 {
@@ -53,14 +53,13 @@ namespace Rhiza
         mImpl.reset();
     }
 
-    bool RhizaEngine::tick()
+    bool RhizaEngine::beginFrame()
     {
         if( !mImpl || !mImpl->running )
             return false;
 
-        // Measures the time the *previous* iteration of this loop took
-        // (everything below, plus whatever the OS/compositor made us wait
-        // for) - the conventional meaning of "this frame's delta time".
+        // Measures the previous whole iteration - the conventional meaning
+        // of "this frame's delta time".
         mImpl->clock.tick();
 
         if( !mImpl->window.pollEvents( mImpl->input ) )
@@ -69,8 +68,13 @@ namespace Rhiza
             return false;
         }
 
-        mImpl->renderer.renderOneFrame();
         return true;
+    }
+
+    void RhizaEngine::endFrame()
+    {
+        if( mImpl && mImpl->running )
+            mImpl->renderer.renderOneFrame();
     }
 
     MeshHandle RhizaEngine::createMeshAsset( const MeshDesc &desc )

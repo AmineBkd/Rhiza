@@ -9,7 +9,7 @@
 // Deliberately dependency-free rather than pulling in a test framework;
 // there is not yet enough here to justify one.
 
-#include "Input.h"
+#include "platform/Input.h"
 
 #include <cstdio>
 #include <string>

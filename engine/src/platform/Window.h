@@ -3,7 +3,7 @@
 #include <string>
 
 #include "Input.h"
-#include "NativeWindowHandle.h"
+#include "core/NativeWindowHandle.h"
 
 struct SDL_Window;
 
