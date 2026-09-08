@@ -10,12 +10,10 @@ struct SDL_Window;
 namespace Rhiza
 {
 
-// Thin SDL3 wrapper. Owns the OS window and the SDL event pump; knows
-// nothing about rendering. Renderer.h must never be included here.
-//
-// Also the one place in the engine allowed to know SDL's key types: it
-// translates SDL_Scancode into Rhiza::Key before anything else ever sees it,
-// the same way getNativeHandle() translates SDL's window handle types.
+// Thin SDL3 wrapper: owns the OS window and the event pump, knows nothing
+// about rendering (Renderer.h must never be included here). The one place
+// allowed to know SDL's key and window-handle types, which it translates
+// before anything else sees them.
 class Window
 {
 public:
@@ -24,9 +22,8 @@ public:
     bool initialize( const std::string &title, int width, int height );
     void shutdown();
 
-    // Pumps pending OS events, feeding every key transition to `input` and
-    // releasing all its keys if focus is lost. Returns false once the user
-    // has asked to close the window.
+    // Feeds every key transition to `input`, releasing all keys on focus
+    // loss. False once the user has asked to close the window.
     bool pollEvents( Input &input );
 
     NativeWindowHandle getNativeHandle() const;

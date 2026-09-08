@@ -6,9 +6,9 @@ namespace Rhiza::Shapes
 namespace
 {
 
-// Appends one quad as two triangles, with all four corners sharing `normal`.
-// Corners must be given counter-clockwise as seen from the outside, which is
-// the winding Ogre-Next treats as front-facing.
+// Appends one quad as two triangles, all four corners sharing `normal`.
+// Corners go counter-clockwise seen from outside - the winding Ogre-Next
+// treats as front-facing.
 void addQuad( MeshDesc &mesh, const Vec3 &a, const Vec3 &b, const Vec3 &c, const Vec3 &d,
               const Vec3 &normal )
 {
@@ -28,6 +28,9 @@ void addQuad( MeshDesc &mesh, const Vec3 &a, const Vec3 &b, const Vec3 &c, const
 
 }  // namespace
 
+// 24 vertices rather than 8: a corner belongs to three faces pointing three
+// ways, and a vertex carries one normal, so sharing corners would smear the
+// lighting across the edges.
 MeshDesc cube( float size )
 {
     const float h = size * 0.5f;

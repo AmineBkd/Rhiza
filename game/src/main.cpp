@@ -8,19 +8,16 @@ int main( int argc, char *argv[] )
     if( !engine.initialize( settings ) )
         return 1;
 
-    // The sun. Every Lit material in the scene responds to it.
     Rhiza::LightDesc sun;
     sun.type = Rhiza::LightType::Directional;
     sun.direction = { -1.0f, -1.5f, -0.8f };
     engine.createLight( sun );
 
     // One mesh asset, uploaded once, instantiated twice below with two
-    // different materials - the reason createMeshAsset/createInstance are
-    // separate calls instead of one createMesh doing both.
+    // different materials - the reason createMeshAsset and createInstance
+    // are separate calls.
     Rhiza::MeshHandle cubeMesh = engine.createMeshAsset( Rhiza::Shapes::cube( 2.0f ) );
 
-    // A lit material: each face carries its own normal, so the three faces
-    // we can see catch the light at three different angles.
     Rhiza::MaterialDesc litMaterial;
     litMaterial.shading = Rhiza::ShadingModel::Lit;
     litMaterial.color = { 0.9f, 0.3f, 0.2f, 1.0f };
@@ -28,9 +25,7 @@ int main( int argc, char *argv[] )
     Rhiza::MaterialHandle lit = engine.createMaterial( litMaterial );
     engine.createInstance( cubeMesh, lit );
 
-    // The same mesh again with an Unlit material, for comparison: flat
-    // colour, completely ignoring the light above. This is the 2D/sprite
-    // path.
+    // The same mesh, unlit: flat colour, ignoring the light entirely.
     Rhiza::MaterialDesc unlitMaterial;
     unlitMaterial.shading = Rhiza::ShadingModel::Unlit;
     unlitMaterial.color = { 0.9f, 0.3f, 0.2f, 1.0f };
@@ -38,9 +33,6 @@ int main( int argc, char *argv[] )
     Rhiza::SceneNodeHandle flat = engine.createInstance( cubeMesh, unlit );
     engine.setPosition( flat, { -3.5f, 0.0f, 0.0f } );
 
-    // A ground plane, to catch the light and give the cubes context. Its
-    // own asset and material - different geometry, nothing to share with
-    // the cubes above.
     Rhiza::MeshHandle groundMesh = engine.createMeshAsset( Rhiza::Shapes::plane( 20.0f ) );
     Rhiza::MaterialDesc groundMaterial;
     groundMaterial.color = { 0.35f, 0.38f, 0.4f, 1.0f };
@@ -51,19 +43,17 @@ int main( int argc, char *argv[] )
 
     Rhiza::Vec3 flatPosition{ -3.5f, 0.0f, 0.0f };
 
-    // No control system yet - this is plain game code reading Input and
-    // Clock directly, the same way the arrow-key cube movement below does.
-    // Position and target are tracked here (not queryable from RhizaEngine)
-    // and shifted by the same delta each frame, which pans the view without
-    // changing its angle.
+    // No control system yet - plain game code reading input directly. The
+    // camera's position and target aren't queryable from RhizaEngine, so
+    // they're tracked here and shifted by the same delta, which pans the
+    // view without changing its angle.
     Rhiza::Vec3 cameraPosition = settings.cameraPosition;
     Rhiza::Vec3 cameraTarget = settings.cameraTarget;
 
     while( engine.tick() )
     {
-        // WASD smoke test for Rhiza::Key and deltaSeconds(): pans the
-        // camera on the X/Z plane at a fixed speed regardless of frame rate.
-        // Arrow keys are left free for the cube movement below.
+        // WASD pans the camera, arrows move the unlit cube. Both scale by
+        // deltaSeconds, so speed is the same at any frame rate.
         constexpr float cameraUnitsPerSecond = 4.0f;
         const float camStep = cameraUnitsPerSecond * engine.deltaSeconds();
         if( engine.isKeyDown( Rhiza::Key::W ) )
@@ -88,8 +78,6 @@ int main( int argc, char *argv[] )
         }
         engine.setCamera( cameraPosition, cameraTarget );
 
-        // Arrow-key smoke test for Rhiza::Key and deltaSeconds(): moves the
-        // flat cube at a fixed speed regardless of frame rate.
         constexpr float unitsPerSecond = 3.0f;
         const float step = unitsPerSecond * engine.deltaSeconds();
         if( engine.isKeyDown( Rhiza::Key::Left ) )

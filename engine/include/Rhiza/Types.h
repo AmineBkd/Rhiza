@@ -25,24 +25,16 @@ struct Vertex
 {
     Vec3 position;
 
-    // Which way the surface faces. Only meaningful for ShadingModel::Lit -
-    // it is what makes a lit surface brighter facing a light and darker
-    // facing away. Unlit materials ignore it entirely, so 2D/sprite geometry
-    // can leave it at zero.
+    // Read only by ShadingModel::Lit. Unlit ignores it, so 2D/sprite
+    // geometry can leave it at zero.
     Vec3 normal;
 };
 
-// Which shading path a surface uses. This is the single knob that decides
-// whether something is treated as a 3D object or as flat 2D content, and it
-// maps directly onto Ogre-Next's two Hlms implementations:
-//
-//   Lit   -> HlmsPbs, physically based, responds to lights and shadows.
-//   Unlit -> HlmsUnlit, flat colour, ignores every light in the scene.
-//            Ogre documents it as intended for "GUIs, overlays, particle
-//            FXs, self-illuminating billboards" - i.e. the 2D/effects path.
-//
-// Because it is per-material rather than a global engine mode, a 3D lit
-// world with a 2D unlit HUD over it is the normal case, not a special one.
+// Picks the shading path per material rather than globally, so a lit 3D
+// world with a flat 2D HUD over it is the normal case. Maps onto Ogre-Next's
+// two Hlms implementations: Lit -> HlmsPbs, Unlit -> HlmsUnlit ("great for
+// GUI, billboards, particle FXs"), which is Rhiza's 2D/effects path.
+// https://ogrecave.github.io/ogre-next/api/latest/hlms.html
 enum class ShadingModel
 {
     Lit,
@@ -57,35 +49,24 @@ struct MaterialDesc
     // Lit only. 0 = mirror-smooth, 1 = fully diffuse.
     float roughness = 0.6f;
 
-    // Lit only. 0 = dielectric (plastic, wood, stone), 1 = raw metal.
-    // Values in between are physically meaningless - real surfaces are one
-    // or the other - so prefer the extremes.
+    // Lit only. 0 = dielectric, 1 = raw metal. Values in between are
+    // physically meaningless, so prefer the extremes.
     float metalness = 0.0f;
 
-    // false lets the GPU discard triangles facing away from the camera,
-    // which is free performance but requires consistent winding order.
-    // Defaults to true because MeshDesc makes no promise about winding.
+    // Defaults to true because MeshDesc makes no promise about winding
+    // order; false enables backface culling.
     bool doubleSided = true;
 };
 
-// A plain-data description of a mesh's geometry, built entirely from
-// primitive types so callers never need to know Ogre's vertex/index buffer
-// types exist. Deliberately carries no material - a mesh asset is pure
-// geometry, shareable across any number of instances with different
-// materials (or the same one), which is the entire point of separating
-// createMeshAsset from createInstance.
+// Pure geometry, carrying no material, so one mesh can be instantiated any
+// number of times with different materials.
 struct MeshDesc
 {
     std::vector<Vertex> vertices;
     std::vector<uint16_t> indices;
 
-    // Static geometry uploads as GPU-read-only (Ogre's BT_IMMUTABLE), which
-    // is cheaper but permanently locks the buffer. Destructible geometry -
-    // Expansum's voxel ship cells regenerating their mesh every time a cell
-    // is destroyed - needs to call updateMesh() after creation, which only
-    // a mesh asset created with isMutable = true allows. Static is the
-    // default: most meshes never change after creation, and the cost of
-    // mutability is opt-in only when it's actually needed.
+    // Static geometry uploads as GPU-read-only (BT_IMMUTABLE), which is
+    // cheaper but permanently locks the buffer. updateMesh() needs this true.
     bool isMutable = false;
 };
 
@@ -93,7 +74,7 @@ enum class LightType
 {
     // Infinitely far away, so only its direction matters. The sun.
     Directional,
-    // Radiates in all directions from a point, fading with distance.
+    // Radiates from a point, fading with distance.
     Point,
 };
 
@@ -110,14 +91,13 @@ struct LightDesc
 
     Color color;
 
-    // Brightness multiplier. 1.0 is "normal" exposure for a scene with no
-    // HDR tonemapping, which is what Rhiza currently renders.
+    // 1.0 is "normal" exposure for a scene with no HDR tonemapping, which is
+    // what Rhiza currently renders.
     float power = 1.0f;
 };
 
-// Opaque reference to an object the engine placed in the scene. It carries no
-// usable information on its own; it only identifies "which object" to later
-// callers such as RhizaEngine::setPosition.
+// Opaque references to things the engine owns. They carry no usable
+// information; they only identify which object a later call means.
 struct SceneNodeHandle
 {
     uint32_t id = 0;
@@ -132,9 +112,6 @@ struct LightHandle
     bool isValid() const { return id != 0; }
 };
 
-// Identifies one uploaded mesh asset (geometry only, no material) - the
-// result of createMeshAsset. Passed to createInstance to place a copy of it
-// in the scene, and to updateMesh to change its geometry in place.
 struct MeshHandle
 {
     uint32_t id = 0;
@@ -142,8 +119,6 @@ struct MeshHandle
     bool isValid() const { return id != 0; }
 };
 
-// Identifies one material (Ogre's "datablock") - the result of
-// createMaterial. Passed to createInstance alongside a MeshHandle.
 struct MaterialHandle
 {
     uint32_t id = 0;
@@ -151,16 +126,11 @@ struct MaterialHandle
     bool isValid() const { return id != 0; }
 };
 
-// A physical key, identified by its position on the keyboard rather than
-// what it types - the same key is Key::W whether the layout is QWERTY or
-// AZERTY. That's the right identity for gameplay bindings (WASD stays where
-// your fingers expect it); it is the wrong one for "show the user which key
-// to press" UI, which needs the layout-dependent character instead. Rhiza
-// doesn't need that yet, so it isn't here.
+// A physical key, identified by position rather than what it types - the
+// same key is Key::W on QWERTY and AZERTY. Right for gameplay bindings,
+// wrong for "press X to continue" UI, which Rhiza doesn't need yet.
 //
-// Deliberately not the full keyboard: this covers what a 2D action game
-// binds today (movement, arrows, the usual modifiers). Extending it is a
-// one-line addition here plus one in Window.cpp's translation table.
+// Extending the list is one line here plus one in Window.cpp's table.
 enum class Key
 {
     Unknown = 0,
@@ -178,8 +148,7 @@ enum class Key
     LeftCtrl, RightCtrl,
     LeftAlt, RightAlt,
 
-    // Not a real key - marks how many are tracked, so Input can size its
-    // storage from this instead of a hand-maintained count going stale.
+    // Sizes Input's storage, so it can't go stale.
     Count
 };
 
@@ -189,8 +158,8 @@ struct EngineSettings
     int windowWidth = 1280;
     int windowHeight = 720;
 
-    // Where the camera starts and what it points at. Off-axis by default so
-    // a solid object shows more than one face, which makes lighting legible.
+    // Off-axis by default so a solid object shows more than one face, which
+    // makes lighting legible.
     Vec3 cameraPosition{ 3.5f, 3.0f, 5.0f };
     Vec3 cameraTarget{ 0.0f, 0.0f, 0.0f };
 };

@@ -8,9 +8,7 @@ namespace
 {
 
 // The only function in the engine that knows SDL's scancode numbering.
-// Physical position, not typed character - see the Key comment in Types.h
-// for why that's the right identity for gameplay bindings. Anything not
-// listed falls through to Key::Unknown, which Input silently ignores.
+// Anything unlisted falls through to Key::Unknown, which Input ignores.
 Key toRhizaKey( SDL_Scancode scancode )
 {
     switch( scancode )
@@ -84,13 +82,10 @@ Window::~Window() {
 bool Window::initialize( const std::string &title, int width, int height )
 {
 #if defined( __linux__ )
-    // Ogre-Next's GL3Plus render system talks to the window through GLX,
-    // which needs a real X11 window. Wayland is SDL3's default on most
-    // modern distros, and under Wayland there is no X11 window at all, so
-    // Window::getNativeHandle() would come back empty. Forcing x11 here
-    // trades native Wayland for something Ogre-Next can actually attach to;
-    // XWayland (present on effectively all Wayland desktops) makes this an
-    // X11 window under the hood either way.
+    // GL3Plus reaches the window through GLX, which needs a real X11
+    // window - under SDL3's default Wayland backend there isn't one, and
+    // getNativeHandle() comes back empty. XWayland makes this work anyway.
+    // https://wiki.libsdl.org/SDL3/SDL_HINT_VIDEO_DRIVER
     SDL_SetHint( SDL_HINT_VIDEO_DRIVER, "x11" );
 #endif
 
@@ -135,12 +130,8 @@ bool Window::pollEvents( Input &input )
 
         if( event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP )
         {
-            // SDL fires repeated KEY_DOWN events for a held key. Input's
-            // wasKeyPressed() already derives "just pressed" from the
-            // up->down transition, so letting repeats through would just
-            // mean re-setting a bit that is already set - harmless, but
-            // filtering them here keeps Input's contract simple: every
-            // event it sees is a real transition.
+            // SDL repeats KEY_DOWN for a held key. Dropping those here
+            // keeps Input's contract simple: every event is a transition.
             if( !event.key.repeat )
                 input.handleKeyEvent( toRhizaKey( event.key.scancode ), event.key.down );
         }
@@ -157,10 +148,10 @@ NativeWindowHandle Window::getNativeHandle() const
     NativeWindowHandle handle;
     SDL_PropertiesID props = SDL_GetWindowProperties( mWindow );
 
-    // Every platform Ogre-Next supports needs a different SDL property, but
-    // only the one matching the driver actually running will be non-zero -
-    // querying the others is harmless (SDL just returns the default value),
-    // so trying each in turn avoids needing a compile-time platform switch.
+    // Only the property matching the running driver is non-zero, and
+    // querying the others just returns the default, so trying each in turn
+    // avoids a compile-time platform switch.
+    // https://wiki.libsdl.org/SDL3/SDL_GetWindowProperties
     if( void *hwnd = SDL_GetPointerProperty( props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr ) )
         handle.value = reinterpret_cast<uintptr_t>( hwnd );
     else if( Sint64 xid = SDL_GetNumberProperty( props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0 ) )

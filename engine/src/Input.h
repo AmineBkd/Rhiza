@@ -7,42 +7,26 @@
 namespace Rhiza
 {
 
-// Pure keyboard state - no SDL type appears here or in Input.cpp. Window
-// drains the SDL event queue and reports each transition through
-// handleKeyEvent(); Input only ever deals in Rhiza::Key.
-//
-// Events arrive mid-frame, in a burst, whenever pollEvents() drains the
-// queue - but isDown/wasPressed/wasReleased need to give one stable answer
-// for the rest of the frame, no matter how many times gameplay code asks.
-// beginFrame() is the line that makes that true: call it once, before
-// draining events, so "pressed" always means "transitioned since the frame
-// before," never "transitioned since the last time someone happened to
-// ask."
+// Pure keyboard state; no SDL type appears here or in Input.cpp. Window
+// drains the event queue and reports transitions through handleKeyEvent().
 class Input
 {
 public:
-    // Snapshots the current state as "previous" for this frame's edge
-    // detection. Call exactly once per frame, before any handleKeyEvent().
+    // Snapshots current state as "previous". Exactly once per frame, before
+    // any handleKeyEvent - that is what makes "pressed" mean "since last
+    // frame" rather than "since someone last asked".
     void beginFrame();
 
-    // Records a key transition. Key::Unknown is silently ignored - it means
-    // Window saw a key it doesn't translate, not a real key going down.
+    // Key::Unknown is ignored: it means Window saw a key it doesn't
+    // translate, not a real key going down.
     void handleKeyEvent( Key key, bool isDown );
 
-    // Releases every key at once, as if each had a key-up event. For when
-    // the window loses focus (alt-tab, task switch): the OS can swallow the
-    // matching key-up, and without this a key held at that moment reads as
-    // stuck down for the rest of the session.
+    // Releases every key, as if each got a key-up. For focus loss, where the
+    // OS can swallow the real key-up and leave a key stuck down forever.
     void releaseAll();
 
     bool isKeyDown( Key key ) const;
-
-    // True only on the frame a key went from up to down - the physical
-    // press, not the hold. Window filters out SDL's key-repeat events
-    // before they ever reach here, so holding a key never re-triggers this.
     bool wasKeyPressed( Key key ) const;
-
-    // True only on the frame a key went from down to up.
     bool wasKeyReleased( Key key ) const;
 
 private:

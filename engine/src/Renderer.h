@@ -24,15 +24,12 @@ class HlmsDatablock;
 namespace Rhiza
 {
 
-// Owns every Ogre-Next object: Root, the render window, the scene manager,
-// the Hlms setup and the compositor workspace. Knows nothing about SDL;
-// Window.h must never be included here. The only thing it receives from the
-// window is a NativeWindowHandle to hand to Ogre as the render target.
+// Owns every Ogre-Next object. Knows nothing about SDL; Window.h must never
+// be included here.
 //
-// No Ogre exception is allowed to escape this class. Ogre reports most
-// failures by throwing, but Rhiza's public API reports them as a false
-// return or an invalid handle, so every entry point that can trigger Ogre
-// work translates at the boundary.
+// No Ogre exception may escape: Ogre reports failure by throwing, Rhiza's
+// public API reports it as a false return or an invalid handle, so every
+// entry point translates at the boundary.
 class Renderer
 {
 public:
@@ -43,23 +40,19 @@ public:
 
     void renderOneFrame();
 
-    // Returns 0 if the description is unusable or the GPU buffers could not
-    // be allocated; the reason is written to the log.
+    // 0 if the description is unusable or the GPU buffers could not be
+    // allocated; the reason goes to the log. Same for createInstance below.
     uint32_t createMeshAsset( const MeshDesc &desc );
 
-    // No-op (logged) if `handle` doesn't name a mesh asset created with
-    // MeshDesc::isMutable = true, or the new description is unusable.
+    // No-op (logged) unless `handle` was created with MeshDesc::isMutable.
     void updateMesh( uint32_t handle, const MeshDesc &desc );
 
-    // No-op (logged) while any instance still references this asset.
+    // Both refuse (and log) while any instance still references them.
     void destroyMeshAsset( uint32_t handle );
+    void destroyMaterial( uint32_t handle );
 
     uint32_t createMaterial( const MaterialDesc &desc );
 
-    // No-op (logged) while any instance still references this material.
-    void destroyMaterial( uint32_t handle );
-
-    // Returns 0 if either handle is invalid.
     uint32_t createInstance( uint32_t meshHandle, uint32_t materialHandle );
     void destroyInstance( uint32_t handle );
 
@@ -72,33 +65,27 @@ public:
     void setCamera( Vec3 position, Vec3 target );
 
 private:
-    // The body of initialize(), split out so that one try/catch around the
-    // call site covers every Ogre call in the startup sequence.
+    // Split out so one try/catch at the call site covers every Ogre call in
+    // the startup sequence.
     bool initializeInternal( const NativeWindowHandle &windowHandle, const EngineSettings &settings );
 
-    // Registers both Hlms implementations. Both are always registered even
-    // if a project only uses one, because they are how Rhiza expresses 3D
-    // (Pbs) versus 2D (Unlit) and a scene may freely mix them.
+    // Both implementations are always registered, even if a project uses
+    // only one: they are how Rhiza expresses 3D (Pbs) and 2D (Unlit), and a
+    // scene may mix them freely.
     void registerHlms();
 
-    // Builds the datablock (Ogre's term for a material) matching `material`,
-    // choosing the Pbs or Unlit implementation from its ShadingModel.
     // `name` must be unique across the whole Hlms manager.
     Ogre::HlmsDatablock *createDatablock( const std::string &name, const MaterialDesc &material );
 
-    // Geometry uploaded once via createMeshAsset, instantiated any number of
-    // times via createInstance. Tracked by name rather than an Ogre::MeshPtr
-    // so Renderer.h doesn't need Ogre's mesh headers - see the layer rule in
-    // ARCHITECTURE.md.
+    // Tracked by name rather than an Ogre::MeshPtr so this header doesn't
+    // need Ogre's mesh headers - see the layer rule in ARCHITECTURE.md.
     struct MeshAsset
     {
         std::string name;
         bool isMutable = false;
 
-        // How many live instances reference this asset. destroyMeshAsset
-        // refuses (and logs) while this is nonzero - dropping the asset out
-        // from under a still-attached Item would leave it pointing at a
-        // freed mesh.
+        // Dropping an asset out from under a still-attached Item would leave
+        // it pointing at freed memory, so destroy refuses while this is > 0.
         uint32_t instanceRefCount = 0;
     };
 
@@ -108,10 +95,9 @@ private:
         uint32_t instanceRefCount = 0;
     };
 
-    // One placed copy of a mesh asset, shaded with a material. Tracked
-    // together with which asset/material it references so destroyInstance
-    // can decrement their ref-counts, and updateMesh can find every Item
-    // that needs telling its mesh's geometry changed.
+    // Remembers which asset and material it references, so destroyInstance
+    // can decrement their ref-counts and updateMesh can find every Item that
+    // needs telling its geometry changed.
     struct Instance
     {
         Ogre::SceneNode *node = nullptr;
@@ -132,8 +118,8 @@ private:
     Ogre::Window *mRenderWindow = nullptr;
     Ogre::CompositorWorkspace *mWorkspace = nullptr;
 
-    // Handles are handed out from one counter shared across every map
-    // below, so a handle value is never ambiguous between them.
+    // One counter shared across every map below, so a handle value is never
+    // ambiguous between them.
     uint32_t mNextHandle = 1;
     std::unordered_map<uint32_t, MeshAsset> mMeshAssets;
     std::unordered_map<uint32_t, MaterialAsset> mMaterials;

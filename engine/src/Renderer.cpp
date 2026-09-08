@@ -47,11 +47,9 @@ namespace Rhiza
 namespace
 {
 
-// The vcpkg ogre-next port only enables one render system per platform by
-// default (see its vcpkg.json feature conditions): Direct3D11 on Windows,
-// GL3Plus on Linux, Metal on macOS/iOS. Each ships as a standalone plugin
-// library rather than something you link against (see FindOgreNext.cmake
-// for why), loaded by hand at runtime via its Ogre-internal display name.
+// The vcpkg ogre-next port enables one render system per platform. Each
+// ships as a runtime-loaded plugin rather than something you link against
+// (see FindOgreNext.cmake), found by its Ogre-internal display name.
 #if defined( _WIN32 )
 constexpr const char *kPluginBaseName = "RenderSystem_Direct3D11";
 constexpr const char *kRenderSystemName = "Direct3D11 Rendering Subsystem";
@@ -65,25 +63,19 @@ constexpr const char *kRenderSystemName = "OpenGL 3+ Rendering Subsystem";
 #    error "Unsupported platform: add its Ogre-Next render system plugin name here."
 #endif
 
-// Ogre-Next's ogre_config_plugin() clears the library prefix on GCC/Clang,
-// so a plugin never carries the leading "lib" that the Unix convention would
-// otherwise give it, and its OGRE_PLUGIN_PATH puts the file somewhere other
-// than beside the regular libraries - differently on each platform:
-//   Windows  <root>/bin/RenderSystem_Direct3D11.dll   (RUNTIME destination)
-//   macOS    <root>/lib/RenderSystem_Metal.dylib      (OGRE_PLUGIN_PATH "/")
+// Plugins never carry the Unix "lib" prefix (ogre_config_plugin clears it)
+// and land somewhere other than beside the regular libraries, differently
+// per platform:
+//   Windows  <root>/bin/RenderSystem_Direct3D11.dll
+//   macOS    <root>/lib/RenderSystem_Metal.dylib
 //   Linux    <root>/lib/OGRE-Next/RenderSystem_GL3Plus.so
-//                                        (OGRE_PLUGIN_PATH "/OGRE-Next")
-// Note the Linux plugin is additionally built with RUNPATH "$ORIGIN:$ORIGIN/.."
-// so it can resolve libOgreNextMain and the image/zip dependencies one level
-// up: it has to be loaded from that directory in place, not copied next to
-// the executable.
+// The Linux one has RUNPATH "$ORIGIN:$ORIGIN/.." to resolve libOgreNextMain
+// one level up, so it must be loaded in place, not copied beside the exe.
 //
-// Debug and Release builds load each other's OgreNextMain library if
-// mismatched, so the choice must track how *this* binary itself was built,
-// not what happens to exist on disk - hence RHIZA_DEBUG_BUILD (set
-// explicitly by engine/CMakeLists.txt from the actual CMake build
-// configuration) rather than probing the filesystem or relying on ambient
-// debug macros, whose exact trigger conditions vary by toolchain.
+// A mismatched Debug/Release pair silently loads the wrong OgreNextMain, so
+// this tracks how *this* binary was built (RHIZA_DEBUG_BUILD, set by
+// engine/CMakeLists.txt) rather than probing the filesystem or trusting
+// ambient debug macros.
 std::string getRenderSystemPluginPath()
 {
 #if defined( _WIN32 )
@@ -117,10 +109,9 @@ struct GpuVertex
     float nx, ny, nz;
 };
 
-// Owns a block of OGRE_MALLOC_SIMD memory until Ogre takes it over. The Vao
-// creation calls adopt the pointer when they succeed - we always pass
-// keepAsShadow = true - but if one throws, freeing it is still our job.
-// Holding it here means the throwing path cannot leak.
+// Owns OGRE_MALLOC_SIMD memory until Ogre takes it over. The Vao calls
+// adopt the pointer on success (keepAsShadow = true), but if one throws,
+// freeing it is still our job - holding it here means that path can't leak.
 template <typename T>
 class SimdArray
 {
@@ -150,10 +141,9 @@ private:
     T *mPtr;
 };
 
-// Returns an empty string when the description can be turned into a mesh,
-// otherwise a human-readable reason why it cannot. Checking up front means
-// a caller mistake produces a log line rather than an Ogre assertion or,
-// worse, an out-of-range index that reads garbage on the GPU.
+// Empty string if the description is usable, otherwise why it isn't.
+// Checking up front turns a caller mistake into a log line rather than an
+// Ogre assertion or an out-of-range index reading garbage on the GPU.
 std::string describeProblem( const MeshDesc &desc )
 {
     if( desc.vertices.empty() )
@@ -184,18 +174,14 @@ std::string describeProblem( const MeshDesc &desc )
     return {};
 }
 
-// Builds the position+normal interleaved Vao described by `desc`, with the
-// given buffer type - BT_IMMUTABLE for static assets, BT_DEFAULT for mutable
-// ones (see MeshDesc::isMutable). Shared by createMeshAsset and updateMesh's
-// rebuild path so the two can't drift apart on element layout. Throws
-// Ogre::Exception on allocation failure, same as the buffer calls it wraps;
-// callers own their own try/catch and log message.
+// Builds the position+normal interleaved Vao. Shared by createMeshAsset and
+// updateMesh's rebuild path so the two can't drift on element layout.
+// Throws Ogre::Exception on allocation failure; callers own the try/catch.
 Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoManager,
                                    Ogre::BufferType bufferType, Ogre::Aabb &outBounds )
 {
-    // Position and normal interleaved in one buffer. The declared element
-    // order here must match GpuVertex's field order exactly - Ogre reads the
-    // buffer as raw bytes and trusts this declaration to interpret them.
+    // Element order must match GpuVertex exactly: Ogre reads the buffer as
+    // raw bytes and trusts this declaration to interpret them.
     Ogre::VertexElement2Vec vertexElements;
     vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_POSITION ) );
     vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_NORMAL ) );
@@ -288,10 +274,8 @@ Renderer::~Renderer()
 
 bool Renderer::initialize( const NativeWindowHandle &windowHandle, const EngineSettings &settings )
 {
-    // Ogre signals nearly every startup failure by throwing - a missing
-    // render system plugin, an unusable window handle, a missing Hlms
-    // template folder. Rhiza's contract is a false return, so the whole
-    // sequence is contained here and translated at this boundary.
+    // Ogre signals nearly every startup failure by throwing; Rhiza's
+    // contract is a false return, so the whole sequence translates here.
     try
     {
         return initializeInternal( windowHandle, settings );
@@ -324,11 +308,9 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
     mRoot->setRenderSystem( renderSystem );
     mRoot->initialise( false );
 
-    // "externalWindowHandle" means the same thing on every platform Ogre-Next
-    // supports: render directly into a window we already created and own
-    // (as opposed to letting Ogre create and own its own OS window). Only
-    // the underlying value differs - HWND, X11 XID, or NSWindow* - which
-    // Window::getNativeHandle() already resolved into one portable integer.
+    // "externalWindowHandle" means the same thing everywhere: render into a
+    // window we already own rather than one Ogre creates. Only the
+    // underlying value differs, which getNativeHandle() already resolved.
     Ogre::NameValuePairList params;
     params["externalWindowHandle"] = Ogre::StringConverter::toString( windowHandle.value );
     params["vsync"] = "Yes";
@@ -342,9 +324,8 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
 
     mSceneManager = mRoot->createSceneManager( Ogre::ST_GENERIC, 1, "RhizaSceneManager" );
 
-    // Without any ambient term, surfaces facing away from every light render
-    // pure black. A dim sky/ground pair keeps unlit faces readable; callers
-    // can override it via setAmbientLight().
+    // Without an ambient term, surfaces facing away from every light render
+    // pure black. Callers can override via setAmbientLight().
     setAmbientLight( Color{ 0.3f, 0.35f, 0.45f, 1.0f }, Color{ 0.15f, 0.14f, 0.13f, 1.0f } );
 
     mCamera = mSceneManager->createCamera( "MainCamera" );
@@ -369,10 +350,9 @@ void Renderer::registerHlms()
     Ogre::ArchiveManager &archiveManager = Ogre::ArchiveManager::getSingleton();
     const Ogre::String mediaRoot = std::string( RHIZA_MEDIA_DIR ) + "/";
 
-    // Both implementations describe the folders they need to compile their
-    // shaders from, and the paths are relative to our media root. The
-    // folders themselves are vendored in engine/media/Hlms - see the
-    // ATTRIBUTION.txt there for why they aren't supplied by vcpkg.
+    // Each implementation names the shader-template folders it needs,
+    // relative to our media root. They're vendored in engine/media/Hlms -
+    // see ATTRIBUTION.txt there for why vcpkg doesn't supply them.
     auto loadArchives = [&]( const Ogre::String &mainFolderPath,
                              const Ogre::StringVector &libraryFoldersPaths,
                              Ogre::ArchiveVec &outLibraryFolders ) -> Ogre::Archive * {
@@ -400,11 +380,10 @@ void Renderer::registerHlms()
         hlmsManager->registerHlms( OGRE_NEW Ogre::HlmsPbs( mainArchive, &libraryFolders ) );
     }
 
-    // HlmsManager treats HLMS_PBS as the fallback for anything with no
-    // material assigned - which every Item briefly is, in the moment between
-    // createItem() and our setDatablock() call. Registering Pbs above is
-    // what makes that fallback valid; when only Unlit was registered this
-    // null-dereferenced inside HlmsManager::getDefaultDatablock().
+    // HlmsManager falls back to HLMS_PBS for anything with no material -
+    // which every Item briefly is, between createItem() and setDatablock().
+    // With only Unlit registered this null-dereferenced inside
+    // HlmsManager::getDefaultDatablock().
 }
 
 void Renderer::shutdown()
@@ -412,9 +391,8 @@ void Renderer::shutdown()
     if( !mRoot )
         return;
 
-    // Ogre::Root's destructor tears down the scene manager, the mesh and
-    // Hlms managers, and everything in them, so these only need forgetting,
-    // not individually destroying.
+    // ~Root tears down the scene manager and everything in it, so these
+    // only need forgetting, not individually destroying.
     mMeshAssets.clear();
     mMaterials.clear();
     mInstances.clear();
@@ -516,10 +494,9 @@ void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
     Ogre::VertexArrayObject *oldVao = subMesh->mVao[Ogre::VpNormal][0];
     Ogre::VaoManager *vaoManager = mRoot->getRenderSystem()->getVaoManager();
 
-    // Same vertex and index counts as before: the existing buffers already
-    // have room, so this is a plain re-upload with no GPU allocation - the
-    // fast, common path for geometry that moves or deforms without changing
-    // topology.
+    // Same counts as before: a plain re-upload into the existing buffers,
+    // no GPU allocation. The common path for deformation without topology
+    // change.
     const Ogre::VertexBufferPackedVec &vertexBuffers = oldVao->getVertexBuffers();
     const bool sameSize = vertexBuffers.size() == 1 &&
                           vertexBuffers[0]->getNumElements() == desc.vertices.size() &&
@@ -546,10 +523,8 @@ void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
     }
     else
     {
-        // Topology changed - the existing buffers are the wrong size and
-        // there is no partial-upload path for that, so replace them
-        // outright. This is what Expansum's voxel destruction hits every
-        // time a cell removal changes the ship's vertex/index counts.
+        // Topology changed, so the buffers are the wrong size and there is
+        // no partial-upload path - replace them outright.
         Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
         Ogre::VertexArrayObject *newVao = nullptr;
         try
@@ -570,10 +545,10 @@ void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
         mesh->_setBoundingSphereRadius( bounds.getRadius() );
     }
 
-    // Every Item built from this Mesh cached its own copy of the Vao at
-    // creation time and has no idea it just changed underneath it.
-    // _initialise(true) is Ogre-Next's documented way to force that rebuild
-    // ("useful if you changed the content of a Mesh ... at runtime").
+    // Every Item cached its own Vao at creation and has no idea it just
+    // changed. _initialise(true) forces the rebuild - "useful if you changed
+    // the content of a Mesh or Skeleton at runtime".
+    // https://ogrecave.github.io/ogre-next/api/latest/class_ogre_1_1_item.html
     for( auto &instanceEntry : mInstances )
     {
         if( instanceEntry.second.meshAssetHandle == handle )
@@ -594,9 +569,9 @@ void Renderer::destroyMeshAsset( uint32_t handle )
         return;
     }
 
-    // Removing the mesh resource cascades - ~SubMesh destroys its Vaos and,
-    // through them, the vertex and index buffers. Ogre also handles our
-    // sharing one Vao between VpNormal and VpShadow without double-freeing.
+    // Cascades: ~SubMesh destroys its Vaos and the buffers behind them, and
+    // handles our one Vao shared between VpNormal and VpShadow without
+    // double-freeing.
     Ogre::MeshManager::getSingleton().remove( it->second.name );
     mMeshAssets.erase( it );
 }
@@ -703,9 +678,9 @@ void Renderer::setPosition( uint32_t handle, Vec3 position )
 Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
                                                 const MaterialDesc &material )
 {
-    // Winding order is only trustworthy when the caller promised it, so
-    // culling stays off unless the material opts in. CULL_CLOCKWISE is
-    // Ogre's default and, confusingly, means "keep anticlockwise faces".
+    // Culling stays off unless the material opts in, since winding is only
+    // trustworthy when the caller promised it. CULL_CLOCKWISE is Ogre's
+    // default and, confusingly, means "keep anticlockwise faces".
     Ogre::HlmsMacroblock macroblock;
     macroblock.mCullMode = material.doubleSided ? Ogre::CULL_NONE : Ogre::CULL_CLOCKWISE;
 
@@ -750,9 +725,9 @@ uint32_t Renderer::createLight( const LightDesc &desc )
     light->setDiffuseColour( toOgre( desc.color ) );
     light->setSpecularColour( toOgre( desc.color ) );
 
-    // Ogre's PBS divides incoming light by PI, which is correct for an HDR
-    // pipeline that later tonemaps. Rhiza renders straight to an LDR target,
-    // so we fold PI back in here and let callers think in plain multiples.
+    // Ogre's PBS divides incoming light by PI, correct for an HDR pipeline
+    // that later tonemaps. Rhiza renders straight to LDR, so fold it back in
+    // and let callers think in plain multiples.
     light->setPowerScale( desc.power * Ogre::Math::PI );
 
     if( desc.type == LightType::Directional )

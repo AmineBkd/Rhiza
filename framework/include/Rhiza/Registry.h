@@ -24,16 +24,13 @@ public:
     virtual void remove( Entity entity ) = 0;
 };
 
-// A sparse set: O(1) add/remove/lookup, and the components of one type
-// packed contiguously for cache-friendly iteration - the two properties
-// that make a sparse-set ECS worth using over a plain
-// std::unordered_map<Entity, T> per component type.
+// A sparse set: O(1) add/remove/lookup with the components packed
+// contiguously for cache-friendly iteration.
+// https://skypjack.github.io/2019-03-07-ecs-baf-part-2/
 //
-// `mSparse[entity.index]` holds where that entity's component lives in the
-// dense arrays, or kInvalidDenseIndex if it has none. Removal is
-// swap-and-pop: the last dense element moves into the removed slot, so
-// `mSparse` for *that* entity must be patched to point at its new home -
-// the one subtlety a sparse-set gets wrong if written carelessly.
+// Removal is swap-and-pop, so mSparse for the *moved* entity has to be
+// patched to its new home - the one subtlety this gets wrong if written
+// carelessly.
 template <typename T>
 class ComponentPool : public ComponentPoolBase
 {
@@ -67,9 +64,8 @@ public:
         mSparse[entity.index] = kInvalidDenseIndex;
     }
 
-    // Checks the *full* Entity, generation included - not just whether the
-    // index slot has an entry. Without that, a stale handle whose index was
-    // recycled would alias onto the new occupant's component.
+    // Checks the full Entity, generation included: without that, a stale
+    // handle whose index was recycled would alias onto the new occupant.
     bool contains( Entity entity ) const
     {
         return entity.index < mSparse.size() && mSparse[entity.index] != kInvalidDenseIndex &&
@@ -100,10 +96,10 @@ private:
 
 }  // namespace detail
 
-// Iterates every (Entity, T&) pair currently holding a component of type T,
-// in dense-array order - not creation order, since swap-and-pop reorders on
-// removal. Do not add or remove components of type T while iterating a
-// view over it: that mutates the array underneath the iterator.
+// Iterates every (Entity, T&) pair holding a component of type T, in
+// dense-array order - not creation order, since swap-and-pop reorders on
+// removal. Do not add or remove components of type T while iterating: that
+// mutates the array underneath the iterator.
 template <typename T>
 class View
 {
@@ -140,13 +136,7 @@ private:
 
 // The ECS core: entity lifecycle plus per-type component storage. Nothing
 // here knows what a Transform or a MeshRenderer is - concrete components
-// are for game/engine code built on top of this, once the mesh/asset split
-// they depend on has a stable shape (see rhiza-design/TODO.md).
-//
-// Deliberately a sparse-set, not an archetype/chunk design: the MVP's real
-// entity count is in the hundreds, and archetype iteration solves a
-// cache-locality problem this scale doesn't have. Small enough to replace
-// with EnTT later if that ever becomes worthwhile - see TODO.md.
+// belong to the code built on top of this.
 class Registry
 {
 public:
@@ -166,8 +156,7 @@ public:
         return Entity{ index, mGenerations[index] };
     }
 
-    // No-op if `entity` is already dead - double-destroying is a caller
-    // mistake that shouldn't need guarding at every call site.
+    // No-op if already dead, so call sites don't each need a guard.
     void destroyEntity( Entity entity )
     {
         if( !isAlive( entity ) )
@@ -180,9 +169,8 @@ public:
         mFreeIndices.push_back( entity.index );
     }
 
-    // False for a default-constructed Entity, one already destroyed, or a
-    // stale handle whose index has since been recycled into a new entity -
-    // the three ways an Entity can fail to name something real right now.
+    // False for a default-constructed Entity, a destroyed one, or a stale
+    // handle whose index has since been recycled.
     bool isAlive( Entity entity ) const
     {
         return entity.isValid() && entity.index < mGenerations.size() &&
@@ -223,10 +211,8 @@ public:
         return pool ? pool->get( entity ) : nullptr;
     }
 
-    // Only one component type per view - no query intersection (e.g.
-    // "entities with both A and B") yet. Everything the MVP needs so far is
-    // single-type; add intersection when a real caller needs it rather than
-    // speculatively.
+    // One component type per view; no "entities with both A and B"
+    // intersection until a real caller needs it.
     template <typename T>
     View<T> view()
     {
