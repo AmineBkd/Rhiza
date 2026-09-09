@@ -109,33 +109,36 @@ struct GpuVertex
     float nx, ny, nz;
 };
 
-// Owns OGRE_MALLOC_SIMD memory until Ogre takes it over. The Vao calls
-// adopt the pointer on success (keepAsShadow = true), but if one throws,
-// freeing it is still our job - holding it here means that path can't leak.
+// A CPU-side buffer of data on its way to the GPU, freed when it leaves
+// scope - including when an Ogre call throws part-way through building a
+// mesh. Allocated with OGRE_MALLOC_SIMD because Ogre reads this memory with
+// SIMD instructions, which require 16-byte alignment that new/malloc does
+// not promise.
+//
+// Nothing takes ownership of this: Rhiza passes keepAsShadow = false, so
+// Ogre copies the bytes during the call and the block is ours to free. See
+// the shadow-copy decision in rhiza-design/DECISIONS.md.
 template <typename T>
-class SimdArray
+class ScopedUploadBuffer
 {
 public:
-    explicit SimdArray( size_t count ) :
+    explicit ScopedUploadBuffer( size_t count ) :
         mPtr( static_cast<T *>(
             OGRE_MALLOC_SIMD( sizeof( T ) * count, Ogre::MEMCATEGORY_GEOMETRY ) ) )
     {
     }
 
-    ~SimdArray()
+    ~ScopedUploadBuffer()
     {
         if( mPtr )
             OGRE_FREE_SIMD( mPtr, Ogre::MEMCATEGORY_GEOMETRY );
     }
 
-    SimdArray( const SimdArray & ) = delete;
-    SimdArray &operator=( const SimdArray & ) = delete;
+    ScopedUploadBuffer( const ScopedUploadBuffer & ) = delete;
+    ScopedUploadBuffer &operator=( const ScopedUploadBuffer & ) = delete;
 
     T *get() const { return mPtr; }
     T &operator[]( size_t i ) { return mPtr[i]; }
-
-    // Ogre now owns the block; stop tracking it.
-    void release() { mPtr = nullptr; }
 
 private:
     T *mPtr;
@@ -189,7 +192,7 @@ Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoMa
     const size_t numVertices = desc.vertices.size();
     const size_t numIndices = desc.indices.size();
 
-    SimdArray<GpuVertex> vertexData( numVertices );
+    ScopedUploadBuffer<GpuVertex> vertexData( numVertices );
     outBounds = Ogre::Aabb::BOX_NULL;
     for( size_t i = 0; i < numVertices; ++i )
     {
@@ -199,20 +202,22 @@ Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoMa
         outBounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
     }
 
-    SimdArray<Ogre::uint16> indexData( numIndices );
+    ScopedUploadBuffer<Ogre::uint16> indexData( numIndices );
     std::memcpy( indexData.get(), desc.indices.data(), sizeof( Ogre::uint16 ) * numIndices );
 
     Ogre::VertexBufferPacked *vertexBuffer = nullptr;
     Ogre::IndexBufferPacked *indexBuffer = nullptr;
     try
     {
+        // keepAsShadow = false: Ogre copies the bytes and does not retain our
+        // allocation, so geometry lives in VRAM only. See DECISIONS.md -
+        // a lost device is handled by saving and restarting, not by
+        // rebuilding from a RAM mirror.
         vertexBuffer = vaoManager->createVertexBuffer( vertexElements, numVertices, bufferType,
-                                                       vertexData.get(), true );
-        vertexData.release();
+                                                       vertexData.get(), false );
 
         indexBuffer = vaoManager->createIndexBuffer( Ogre::IndexBufferPacked::IT_16BIT, numIndices,
-                                                     bufferType, indexData.get(), true );
-        indexData.release();
+                                                     bufferType, indexData.get(), false );
 
         Ogre::VertexBufferPackedVec vertexBuffers;
         vertexBuffers.push_back( vertexBuffer );
@@ -417,7 +422,22 @@ void Renderer::shutdown()
 
 void Renderer::renderOneFrame()
 {
-    mRoot->renderOneFrame();
+    if( mDeviceLost )
+        return;
+
+    // The only per-frame Ogre call, and the one that reports a lost device -
+    // a driver reset, a GPU removed, or VK_ERROR_DEVICE_LOST on Android.
+    // Rhiza does not attempt in-process recovery: the frame loop stops and
+    // the game saves and restarts. See DECISIONS.md.
+    try
+    {
+        mRoot->renderOneFrame();
+    }
+    catch( Ogre::Exception &e )
+    {
+        logError( "device lost while rendering: " + e.getDescription() );
+        mDeviceLost = true;
+    }
 }
 
 uint32_t Renderer::createMeshAsset( const MeshDesc &desc )

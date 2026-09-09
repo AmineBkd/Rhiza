@@ -40,6 +40,10 @@ public:
 
     void renderOneFrame();
 
+    // True once the GPU device has been lost. Rendering becomes a no-op from
+    // that point; there is no in-process recovery by design.
+    bool isDeviceLost() const { return mDeviceLost; }
+
     // 0 if the description is unusable or the GPU buffers could not be
     // allocated; the reason goes to the log. Same for createInstance below.
     uint32_t createMeshAsset( const MeshDesc &desc );
@@ -117,6 +121,7 @@ private:
     Ogre::Camera *mCamera = nullptr;
     Ogre::Window *mRenderWindow = nullptr;
     Ogre::CompositorWorkspace *mWorkspace = nullptr;
+    bool mDeviceLost = false;
 
     // One counter shared across every map below, so a handle value is never
     // ambiguous between them.

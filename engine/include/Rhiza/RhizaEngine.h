@@ -30,6 +30,13 @@ public:
     // loop without calling endFrame().
     bool beginFrame();
 
+    // True once the GPU device has been lost - a driver reset, a GPU
+    // removed, or VK_ERROR_DEVICE_LOST on Android. beginFrame() returns
+    // false from then on, so the loop exits; check this afterwards to tell a
+    // crash apart from the user closing the window. The engine does not
+    // recover in place: save and restart the process.
+    bool deviceLost() const;
+
     // Renders the frame. Call once per successful beginFrame(), after game
     // code has finished mutating the scene - anything changed after this
     // lands on screen a frame late.

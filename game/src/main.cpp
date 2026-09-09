@@ -95,5 +95,12 @@ int main( int argc, char *argv[] )
         engine.endFrame();
     }
 
+    // The loop ends either because the user closed the window or because the
+    // device was lost. There is no save system yet, so this only reports the
+    // difference - once there is one, the device-lost branch saves and
+    // relaunches instead of returning. See rhiza-design/TODO.md.
+    if( engine.deviceLost() )
+        return 2;
+
     return 0;
 }

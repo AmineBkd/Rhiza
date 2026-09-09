@@ -68,7 +68,21 @@ namespace Rhiza
             return false;
         }
 
+        // Stop the loop rather than render into a dead device. The game asks
+        // deviceLost() afterwards to decide between a clean exit and a
+        // save-and-restart.
+        if( mImpl->renderer.isDeviceLost() )
+        {
+            mImpl->running = false;
+            return false;
+        }
+
         return true;
+    }
+
+    bool RhizaEngine::deviceLost() const
+    {
+        return mImpl && mImpl->renderer.isDeviceLost();
     }
 
     void RhizaEngine::endFrame()
