@@ -1,4 +1,4 @@
-#include <Rhiza/RhizaEngine.h>
+#include <Rhiza/Engine.h>
 #include "core/Clock.h"
 #include "platform/Input.h"
 #include "render/Renderer.h"
@@ -6,7 +6,7 @@
 
 namespace Rhiza
 {
-    struct RhizaEngine::Impl
+    struct Engine::Impl
     {
         Window window;
         Renderer renderer;
@@ -15,13 +15,13 @@ namespace Rhiza
         bool running = false;
     };
 
-    RhizaEngine::RhizaEngine() = default;
+    Engine::Engine() = default;
 
-    RhizaEngine::~RhizaEngine() {
+    Engine::~Engine() {
         shutdown();
     }
 
-    bool RhizaEngine::initialize( const EngineSettings &settings )
+    bool Engine::initialize( const EngineSettings &settings )
     {
         mImpl = std::make_unique<Impl>();
 
@@ -43,7 +43,7 @@ namespace Rhiza
         return true;
     }
 
-    void RhizaEngine::shutdown()
+    void Engine::shutdown()
     {
         if( !mImpl )
             return;
@@ -53,7 +53,7 @@ namespace Rhiza
         mImpl.reset();
     }
 
-    bool RhizaEngine::beginFrame()
+    bool Engine::beginFrame()
     {
         if( !mImpl || !mImpl->running )
             return false;
@@ -80,18 +80,18 @@ namespace Rhiza
         return true;
     }
 
-    bool RhizaEngine::deviceLost() const
+    bool Engine::deviceLost() const
     {
         return mImpl && mImpl->renderer.isDeviceLost();
     }
 
-    void RhizaEngine::endFrame()
+    void Engine::endFrame()
     {
         if( mImpl && mImpl->running )
             mImpl->renderer.renderOneFrame();
     }
 
-    MeshHandle RhizaEngine::createMeshAsset( const MeshDesc &desc )
+    MeshHandle Engine::createMeshAsset( const MeshDesc &desc )
     {
         MeshHandle handle;
         if( mImpl )
@@ -99,19 +99,19 @@ namespace Rhiza
         return handle;
     }
 
-    void RhizaEngine::updateMesh( MeshHandle mesh, const MeshDesc &desc )
+    void Engine::updateMesh( MeshHandle mesh, const MeshDesc &desc )
     {
         if( mImpl && mesh.isValid() )
             mImpl->renderer.updateMesh( mesh.id, desc );
     }
 
-    void RhizaEngine::destroyMeshAsset( MeshHandle mesh )
+    void Engine::destroyMeshAsset( MeshHandle mesh )
     {
         if( mImpl && mesh.isValid() )
             mImpl->renderer.destroyMeshAsset( mesh.id );
     }
 
-    MaterialHandle RhizaEngine::createMaterial( const MaterialDesc &desc )
+    MaterialHandle Engine::createMaterial( const MaterialDesc &desc )
     {
         MaterialHandle handle;
         if( mImpl )
@@ -119,33 +119,33 @@ namespace Rhiza
         return handle;
     }
 
-    void RhizaEngine::destroyMaterial( MaterialHandle material )
+    void Engine::destroyMaterial( MaterialHandle material )
     {
         if( mImpl && material.isValid() )
             mImpl->renderer.destroyMaterial( material.id );
     }
 
-    SceneNodeHandle RhizaEngine::createInstance( MeshHandle mesh, MaterialHandle material )
+    InstanceHandle Engine::createInstance( MeshHandle mesh, MaterialHandle material )
     {
-        SceneNodeHandle handle;
+        InstanceHandle handle;
         if( mImpl && mesh.isValid() && material.isValid() )
             handle.id = mImpl->renderer.createInstance( mesh.id, material.id );
         return handle;
     }
 
-    void RhizaEngine::destroyInstance( SceneNodeHandle instance )
+    void Engine::destroyInstance( InstanceHandle instance )
     {
         if( mImpl && instance.isValid() )
             mImpl->renderer.destroyInstance( instance.id );
     }
 
-    void RhizaEngine::setPosition( SceneNodeHandle handle, Vec3 position )
+    void Engine::setPosition( InstanceHandle handle, Vec3 position )
     {
         if( mImpl && handle.isValid() )
             mImpl->renderer.setPosition( handle.id, position );
     }
 
-    LightHandle RhizaEngine::createLight( const LightDesc &desc )
+    LightHandle Engine::createLight( const LightDesc &desc )
     {
         LightHandle handle;
         if( mImpl )
@@ -153,55 +153,55 @@ namespace Rhiza
         return handle;
     }
 
-    void RhizaEngine::destroyLight( LightHandle handle )
+    void Engine::destroyLight( LightHandle handle )
     {
         if( mImpl && handle.isValid() )
             mImpl->renderer.destroyLight( handle.id );
     }
 
-    void RhizaEngine::setAmbientLight( Color skyColor, Color groundColor )
+    void Engine::setAmbientLight( Color skyColor, Color groundColor )
     {
         if( mImpl )
             mImpl->renderer.setAmbientLight( skyColor, groundColor );
     }
 
-    void RhizaEngine::setCamera( Vec3 position, Vec3 target )
+    void Engine::setCamera( Vec3 position, Vec3 target )
     {
         if( mImpl )
             mImpl->renderer.setCamera( position, target );
     }
 
-    bool RhizaEngine::isKeyDown( Key key ) const
+    bool Engine::isKeyDown( Key key ) const
     {
         return mImpl && mImpl->input.isKeyDown( key );
     }
 
-    bool RhizaEngine::wasKeyPressed( Key key ) const
+    bool Engine::wasKeyPressed( Key key ) const
     {
         return mImpl && mImpl->input.wasKeyPressed( key );
     }
 
-    bool RhizaEngine::wasKeyReleased( Key key ) const
+    bool Engine::wasKeyReleased( Key key ) const
     {
         return mImpl && mImpl->input.wasKeyReleased( key );
     }
 
-    float RhizaEngine::deltaSeconds() const
+    float Engine::deltaSeconds() const
     {
         return mImpl ? mImpl->clock.scaledDeltaSeconds() : 0.0f;
     }
 
-    float RhizaEngine::unscaledDeltaSeconds() const
+    float Engine::unscaledDeltaSeconds() const
     {
         return mImpl ? mImpl->clock.realDeltaSeconds() : 0.0f;
     }
 
-    float RhizaEngine::timeScale() const
+    float Engine::timeScale() const
     {
         return mImpl ? mImpl->clock.timeScale() : 1.0f;
     }
 
-    void RhizaEngine::setTimeScale( float scale )
+    void Engine::setTimeScale( float scale )
     {
         if( mImpl )
             mImpl->clock.setTimeScale( scale );

@@ -98,7 +98,7 @@ struct LightDesc
 
 // Opaque references to things the engine owns. They carry no usable
 // information; they only identify which object a later call means.
-struct SceneNodeHandle
+struct InstanceHandle
 {
     uint32_t id = 0;
 

@@ -82,7 +82,7 @@ private:
     Ogre::HlmsDatablock *createDatablock( const std::string &name, const MaterialDesc &material );
 
     // Tracked by name rather than an Ogre::MeshPtr so this header doesn't
-    // need Ogre's mesh headers - see the layer rule in ARCHITECTURE.md.
+    // need Ogre's mesh headers.
     struct MeshAsset
     {
         std::string name;

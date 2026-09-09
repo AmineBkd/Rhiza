@@ -1,9 +1,9 @@
-#include <Rhiza/RhizaEngine.h>
+#include <Rhiza/Engine.h>
 #include <Rhiza/Shapes.h>
 
 int main( int argc, char *argv[] )
 {
-    Rhiza::RhizaEngine engine;
+    Rhiza::Engine engine;
     Rhiza::EngineSettings settings;
     if( !engine.initialize( settings ) )
         return 1;
@@ -30,7 +30,7 @@ int main( int argc, char *argv[] )
     unlitMaterial.shading = Rhiza::ShadingModel::Unlit;
     unlitMaterial.color = { 0.9f, 0.3f, 0.2f, 1.0f };
     Rhiza::MaterialHandle unlit = engine.createMaterial( unlitMaterial );
-    Rhiza::SceneNodeHandle flat = engine.createInstance( cubeMesh, unlit );
+    Rhiza::InstanceHandle flat = engine.createInstance( cubeMesh, unlit );
     engine.setPosition( flat, { -3.5f, 0.0f, 0.0f } );
 
     Rhiza::MeshHandle groundMesh = engine.createMeshAsset( Rhiza::Shapes::plane( 20.0f ) );
@@ -38,13 +38,13 @@ int main( int argc, char *argv[] )
     groundMaterial.color = { 0.35f, 0.38f, 0.4f, 1.0f };
     groundMaterial.roughness = 0.9f;
     Rhiza::MaterialHandle groundMaterialHandle = engine.createMaterial( groundMaterial );
-    Rhiza::SceneNodeHandle groundNode = engine.createInstance( groundMesh, groundMaterialHandle );
+    Rhiza::InstanceHandle groundNode = engine.createInstance( groundMesh, groundMaterialHandle );
     engine.setPosition( groundNode, { 0.0f, -1.5f, 0.0f } );
 
     Rhiza::Vec3 flatPosition{ -3.5f, 0.0f, 0.0f };
 
     // No control system yet - plain game code reading input directly. The
-    // camera's position and target aren't queryable from RhizaEngine, so
+    // camera's position and target aren't queryable from Engine, so
     // they're tracked here and shifted by the same delta, which pans the
     // view without changing its angle.
     Rhiza::Vec3 cameraPosition = settings.cameraPosition;
@@ -95,10 +95,8 @@ int main( int argc, char *argv[] )
         engine.endFrame();
     }
 
-    // The loop ends either because the user closed the window or because the
-    // device was lost. There is no save system yet, so this only reports the
-    // difference - once there is one, the device-lost branch saves and
-    // relaunches instead of returning. See rhiza-design/TODO.md.
+    // No save system yet, so a lost device only reports. Once there is one,
+    // this branch saves and relaunches instead of returning.
     if( engine.deviceLost() )
         return 2;
 

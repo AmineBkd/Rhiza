@@ -115,9 +115,8 @@ struct GpuVertex
 // SIMD instructions, which require 16-byte alignment that new/malloc does
 // not promise.
 //
-// Nothing takes ownership of this: Rhiza passes keepAsShadow = false, so
-// Ogre copies the bytes during the call and the block is ours to free. See
-// the shadow-copy decision in rhiza-design/DECISIONS.md.
+// Nothing takes ownership of this: with keepAsShadow = false Ogre copies
+// the bytes during the call, so the block stays ours to free.
 template <typename T>
 class ScopedUploadBuffer
 {
@@ -209,10 +208,8 @@ Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoMa
     Ogre::IndexBufferPacked *indexBuffer = nullptr;
     try
     {
-        // keepAsShadow = false: Ogre copies the bytes and does not retain our
-        // allocation, so geometry lives in VRAM only. See DECISIONS.md -
-        // a lost device is handled by saving and restarting, not by
-        // rebuilding from a RAM mirror.
+        // keepAsShadow = false keeps geometry in VRAM only, at the cost of
+        // no CPU-side copy to rebuild from.
         vertexBuffer = vaoManager->createVertexBuffer( vertexElements, numVertices, bufferType,
                                                        vertexData.get(), false );
 
@@ -425,10 +422,8 @@ void Renderer::renderOneFrame()
     if( mDeviceLost )
         return;
 
-    // The only per-frame Ogre call, and the one that reports a lost device -
-    // a driver reset, a GPU removed, or VK_ERROR_DEVICE_LOST on Android.
-    // Rhiza does not attempt in-process recovery: the frame loop stops and
-    // the game saves and restarts. See DECISIONS.md.
+    // The only per-frame Ogre call, and the one that throws on a lost
+    // device. There is no in-process recovery: flag it and stop.
     try
     {
         mRoot->renderOneFrame();

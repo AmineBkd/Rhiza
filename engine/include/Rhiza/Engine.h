@@ -9,14 +9,14 @@ namespace Rhiza
 // Facade over the engine's window (SDL3) and renderer (Ogre-Next). Nothing
 // outside engine/src ever includes an SDL or Ogre header: this class and
 // Types.h are the entire public surface.
-class RhizaEngine
+class Engine
 {
 public:
-    RhizaEngine();
-    ~RhizaEngine();
+    Engine();
+    ~Engine();
 
-    RhizaEngine(const RhizaEngine &) = delete;
-    RhizaEngine &operator=(const RhizaEngine &) = delete;
+    Engine(const Engine &) = delete;
+    Engine &operator=(const Engine &) = delete;
 
     // False on failure, with the reason in the log; the engine is unusable
     // until this succeeds.
@@ -66,12 +66,12 @@ public:
     // Refused while any instance still references it.
     void destroyMaterial(MaterialHandle material);
 
-    SceneNodeHandle createInstance(MeshHandle mesh, MaterialHandle material);
+    InstanceHandle createInstance(MeshHandle mesh, MaterialHandle material);
 
     // The mesh asset and material survive; others may still reference them.
-    void destroyInstance(SceneNodeHandle instance);
+    void destroyInstance(InstanceHandle instance);
 
-    void setPosition(SceneNodeHandle handle, Vec3 position);
+    void setPosition(InstanceHandle handle, Vec3 position);
 
     // Only ShadingModel::Lit materials respond to lights.
     LightHandle createLight(const LightDesc &desc);

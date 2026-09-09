@@ -68,9 +68,8 @@ void testTimeScaleFreezesAndReverses()
     check( clock.scaledDeltaSeconds() == clock.realDeltaSeconds() * 2.0f,
            "scale 2 doubles scaled time" );
 
-    // Reversed: rhiza-design/TODO.md's "Frame timing + input" entry
-    // explicitly calls for this, so it must not be clamped away as an
-    // accidental negative.
+    // Negative scale is intentional - time running backward - so it must
+    // not be clamped away as an accidental sign error.
     clock.setTimeScale( -1.0f );
     check( clock.scaledDeltaSeconds() < 0.0f, "negative scale reverses scaled time" );
 }

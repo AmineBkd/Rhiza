@@ -3,9 +3,9 @@ project(RhizaEngine VERSION 0.1 LANGUAGES CXX)
 # src/ is split by layer, and dependencies point one way: toward core.
 # Nothing in platform/ may include render/, or vice versa - they meet only
 # through core/NativeWindowHandle.h. SDL appears only under platform/, Ogre
-# only under render/. See rhiza-design/ARCHITECTURE.md.
+# only under render/.
 add_library(${PROJECT_NAME} STATIC
-    src/RhizaEngine.cpp
+    src/Engine.cpp
 
     src/core/Clock.cpp
     src/core/Shapes.cpp
@@ -20,7 +20,7 @@ add_library(${PROJECT_NAME} STATIC
     src/render/Renderer.cpp
     src/render/Renderer.h
 
-    include/Rhiza/RhizaEngine.h
+    include/Rhiza/Engine.h
     include/Rhiza/Types.h
     include/Rhiza/Shapes.h
 )
