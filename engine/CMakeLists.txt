@@ -39,5 +39,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 OgreNext::OgreNext)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     RHIZA_MEDIA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/media"
     RHIZA_OGRE_INSTALL_ROOT="${OGRENEXT_INSTALL_ROOT}"
-    $<$<CONFIG:Debug>:RHIZA_DEBUG_BUILD>
 )
+
+# Selects the _d render system plugin. Only Windows pairs a debug app with
+# debug Ogre - see cmake/FindOgreNext.cmake for why everywhere else uses the
+# release libraries regardless of build type.
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:RHIZA_DEBUG_BUILD>)
+endif()

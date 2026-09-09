@@ -7,7 +7,7 @@ rem   zrun.bat              -> Debug
 rem   zrun.bat Release      -> Release
 
 set "config=%~1"
-if "%config%"=="" set "config=Debug"
+if "%config%"=="" set "config=RelWithDebInfo"
 
 rem The Visual Studio generator appends the configuration to
 rem CMAKE_RUNTIME_OUTPUT_DIRECTORY, so the exe lands in bin\<config>\.

@@ -13,7 +13,7 @@ rem   zbuild.bat            -> Debug
 rem   zbuild.bat Release    -> Release
 
 set "config=%~1"
-if "%config%"=="" set "config=Debug"
+if "%config%"=="" set "config=RelWithDebInfo"
 
 cmake --preset windows
 if errorlevel 1 exit /b 1

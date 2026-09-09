@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-# Debug by default; Release is deliberate.
+# RelWithDebInfo by default: -O2 -g, and it works on every platform.
 #
-#   ./zbuild.sh            -> Debug
-#   ./zbuild.sh Release    -> Release
-config="${1:-Debug}"
+#   ./zbuild.sh              -> RelWithDebInfo  (-O2 -g)
+#   ./zbuild.sh Debug        -> -g, no optimisation. Linux and macOS only;
+#                               still fails Ogre's ABI check on Windows.
+#   ./zbuild.sh Release      -> -O3
+config="${1:-RelWithDebInfo}"
 
 case "$(uname -s)" in
     Linux*)

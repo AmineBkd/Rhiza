@@ -1,5 +1,9 @@
+#include <Rhiza/Components/MeshRenderer.h>
+#include <Rhiza/Components/Position.h>
 #include <Rhiza/Engine.h>
+#include <Rhiza/Registry.h>
 #include <Rhiza/Shapes.h>
+#include <Rhiza/Systems/RenderSystem.h>
 
 int main( int argc, char *argv[] )
 {
@@ -8,45 +12,49 @@ int main( int argc, char *argv[] )
     if( !engine.initialize( settings ) )
         return 1;
 
+    Rhiza::Registry registry;
+
+    auto spawn = [&]( Rhiza::MeshHandle mesh, Rhiza::MaterialHandle material,
+                      Rhiza::Vec3 position ) {
+        const Rhiza::Entity entity = registry.createEntity();
+        registry.addComponent( entity, Rhiza::Position{ position } );
+        registry.addComponent(
+            entity, Rhiza::MeshRenderer{ mesh, material, engine.createInstance( mesh, material ) } );
+        return entity;
+    };
+
     Rhiza::LightDesc sun;
     sun.type = Rhiza::LightType::Directional;
     sun.direction = { -1.0f, -1.5f, -0.8f };
     engine.createLight( sun );
 
     // One mesh asset, uploaded once, instantiated twice below with two
-    // different materials - the reason createMeshAsset and createInstance
-    // are separate calls.
+    // different materials.
     Rhiza::MeshHandle cubeMesh = engine.createMeshAsset( Rhiza::Shapes::cube( 2.0f ) );
 
     Rhiza::MaterialDesc litMaterial;
     litMaterial.shading = Rhiza::ShadingModel::Lit;
     litMaterial.color = { 0.9f, 0.3f, 0.2f, 1.0f };
     litMaterial.roughness = 0.5f;
-    Rhiza::MaterialHandle lit = engine.createMaterial( litMaterial );
-    engine.createInstance( cubeMesh, lit );
+    spawn( cubeMesh, engine.createMaterial( litMaterial ), { 0.0f, 0.0f, 0.0f } );
 
     // The same mesh, unlit: flat colour, ignoring the light entirely.
     Rhiza::MaterialDesc unlitMaterial;
     unlitMaterial.shading = Rhiza::ShadingModel::Unlit;
     unlitMaterial.color = { 0.9f, 0.3f, 0.2f, 1.0f };
-    Rhiza::MaterialHandle unlit = engine.createMaterial( unlitMaterial );
-    Rhiza::InstanceHandle flat = engine.createInstance( cubeMesh, unlit );
-    engine.setPosition( flat, { -3.5f, 0.0f, 0.0f } );
+    const Rhiza::Entity flatCube =
+        spawn( cubeMesh, engine.createMaterial( unlitMaterial ), { -3.5f, 0.0f, 0.0f } );
 
     Rhiza::MeshHandle groundMesh = engine.createMeshAsset( Rhiza::Shapes::plane( 20.0f ) );
     Rhiza::MaterialDesc groundMaterial;
     groundMaterial.color = { 0.35f, 0.38f, 0.4f, 1.0f };
     groundMaterial.roughness = 0.9f;
-    Rhiza::MaterialHandle groundMaterialHandle = engine.createMaterial( groundMaterial );
-    Rhiza::InstanceHandle groundNode = engine.createInstance( groundMesh, groundMaterialHandle );
-    engine.setPosition( groundNode, { 0.0f, -1.5f, 0.0f } );
-
-    Rhiza::Vec3 flatPosition{ -3.5f, 0.0f, 0.0f };
+    spawn( groundMesh, engine.createMaterial( groundMaterial ), { 0.0f, -1.5f, 0.0f } );
 
     // No control system yet - plain game code reading input directly. The
-    // camera's position and target aren't queryable from Engine, so
-    // they're tracked here and shifted by the same delta, which pans the
-    // view without changing its angle.
+    // camera's position and target aren't queryable from Engine, so they're
+    // tracked here and shifted by the same delta, which pans the view without
+    // changing its angle.
     Rhiza::Vec3 cameraPosition = settings.cameraPosition;
     Rhiza::Vec3 cameraTarget = settings.cameraTarget;
 
@@ -80,18 +88,22 @@ int main( int argc, char *argv[] )
 
         constexpr float unitsPerSecond = 3.0f;
         const float step = unitsPerSecond * engine.deltaSeconds();
-        if( engine.isKeyDown( Rhiza::Key::Left ) )
-            flatPosition.x -= step;
-        if( engine.isKeyDown( Rhiza::Key::Right ) )
-            flatPosition.x += step;
-        if( engine.isKeyDown( Rhiza::Key::Up ) )
-            flatPosition.z -= step;
-        if( engine.isKeyDown( Rhiza::Key::Down ) )
-            flatPosition.z += step;
-        engine.setPosition( flat, flatPosition );
+        if( Rhiza::Position *position = registry.getComponent<Rhiza::Position>( flatCube ) )
+        {
+            if( engine.isKeyDown( Rhiza::Key::Left ) )
+                position->value.x -= step;
+            if( engine.isKeyDown( Rhiza::Key::Right ) )
+                position->value.x += step;
+            if( engine.isKeyDown( Rhiza::Key::Up ) )
+                position->value.z -= step;
+            if( engine.isKeyDown( Rhiza::Key::Down ) )
+                position->value.z += step;
+        }
 
-        // Everything above ran before the draw, so this frame's input is on
-        // screen this frame.
+        // Systems run in the order this loop calls them; the render bridge
+        // goes last so it sees this frame's changes.
+        Rhiza::renderSystem( registry, engine );
+
         engine.endFrame();
     }
 

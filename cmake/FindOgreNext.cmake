@@ -33,6 +33,24 @@ find_library(OGRENEXT_HLMSPBS_LIBRARY_RELEASE NAMES OgreNextHlmsPbs)
 find_library(OGRENEXT_HLMSPBS_LIBRARY_DEBUG NAMES OgreNextHlmsPbs_d)
 select_library_configurations(OGRENEXT_HLMSPBS)
 
+# vcpkg installs a single OgreBuildSettings.h, generated from the release build
+# and hardcoding OGRE_DEBUG_MODE to OGRE_DEBUG_LEVEL_RELEASE. An app compiled
+# against it therefore always identifies as release, and linking the _d
+# libraries fails Ogre's generateAbiCookie/testAbiCookie check at startup -
+# the plugin is rejected and no render system is found.
+#
+# Off Windows there is no separate debug C++ runtime, so pointing the debug
+# configuration at the release libraries is safe and lets a real -O0 -g build
+# of Rhiza itself run. On Windows a debug app links the debug CRT, and mixing
+# that with release libraries breaks on _ITERATOR_DEBUG_LEVEL, so the normal
+# debug/release pairing is kept there and Debug stays unusable until the port
+# ships per-config headers.
+if(NOT WIN32)
+    set(OGRENEXT_LIBRARY_DEBUG "${OGRENEXT_LIBRARY_RELEASE}")
+    set(OGRENEXT_HLMSUNLIT_LIBRARY_DEBUG "${OGRENEXT_HLMSUNLIT_LIBRARY_RELEASE}")
+    set(OGRENEXT_HLMSPBS_LIBRARY_DEBUG "${OGRENEXT_HLMSPBS_LIBRARY_RELEASE}")
+endif()
+
 find_package_handle_standard_args(OgreNext
     REQUIRED_VARS OGRENEXT_LIBRARY OGRENEXT_INCLUDE_DIR
 )
