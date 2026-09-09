@@ -190,6 +190,64 @@ void testView()
     check( pa != nullptr && pa->x == 11.0f, "mutating through a view is visible afterward" );
 }
 
+void testPairView()
+{
+    std::printf( "view<A, B> yields only entities holding both:\n" );
+    Rhiza::Registry registry;
+
+    const Rhiza::Entity both = registry.createEntity();
+    registry.addComponent( both, Position{ 1.0f, 2.0f } );
+    registry.addComponent( both, Velocity{ 3.0f, 4.0f } );
+
+    const Rhiza::Entity positionOnly = registry.createEntity();
+    registry.addComponent( positionOnly, Position{ 9.0f, 9.0f } );
+
+    const Rhiza::Entity velocityOnly = registry.createEntity();
+    registry.addComponent( velocityOnly, Velocity{ 9.0f, 9.0f } );
+
+    int visited = 0;
+    Rhiza::Entity seen;
+    for( auto [entity, position, velocity] : registry.view<Position, Velocity>() )
+    {
+        ++visited;
+        seen = entity;
+        position.x += velocity.dx;
+    }
+
+    check( visited == 1, "pair view yields only entities holding both" );
+    check( seen == both, "pair view yields the entity holding both" );
+
+    const Position *p = registry.getComponent<Position>( both );
+    check( p != nullptr && p->x == 4.0f, "mutating through a pair view is visible afterward" );
+
+    const Position *untouched = registry.getComponent<Position>( positionOnly );
+    check( untouched != nullptr && untouched->x == 9.0f, "pair view skips half-matching entities" );
+
+    // The entity holding only Velocity sits earlier in Velocity's dense array
+    // than `both` does, so iterating Velocity first exercises skipToMatch
+    // having to advance past a non-match at index 0.
+    int reversed = 0;
+    for( auto [entity, velocity, position] : registry.view<Velocity, Position>() )
+    {
+        ++reversed;
+        (void)entity;
+        (void)velocity;
+        (void)position;
+    }
+    check( reversed == 1, "pair view is symmetric in which type comes first" );
+
+    registry.destroyEntity( both );
+    int afterDestroy = 0;
+    for( auto [entity, position, velocity] : registry.view<Position, Velocity>() )
+    {
+        ++afterDestroy;
+        (void)entity;
+        (void)position;
+        (void)velocity;
+    }
+    check( afterDestroy == 0, "pair view is empty once the only match is destroyed" );
+}
+
 }  // namespace
 
 int main()
@@ -200,6 +258,7 @@ int main()
     testSwapAndPopDoesNotCorruptOtherEntities();
     testDestroyEntityClearsEveryComponentType();
     testView();
+    testPairView();
 
     if( gFailures == 0 )
     {

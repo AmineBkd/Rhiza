@@ -34,7 +34,7 @@ int main( int argc, char *argv[] )
 
     Rhiza::MaterialDesc litMaterial;
     litMaterial.shading = Rhiza::ShadingModel::Lit;
-    litMaterial.color = { 0.9f, 0.3f, 0.2f, 1.0f };
+    litMaterial.color = { 0.1f, 0.3f, 0.2f, 1.0f };
     litMaterial.roughness = 0.5f;
     spawn( cubeMesh, engine.createMaterial( litMaterial ), { 0.0f, 0.0f, 0.0f } );
 

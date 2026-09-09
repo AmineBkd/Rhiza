@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <tuple>
 #include <typeindex>
 #include <unordered_map>
 #include <utility>
@@ -96,12 +97,15 @@ private:
 
 }  // namespace detail
 
-// Iterates every (Entity, T&) pair holding a component of type T, in
-// dense-array order - not creation order, since swap-and-pop reorders on
-// removal. Do not add or remove components of type T while iterating: that
+// Iterates entities holding every component named, in the dense-array order
+// of the first one - not creation order, since swap-and-pop reorders on
+// removal. Do not add or remove components of a type being iterated: that
 // mutates the array underneath the iterator.
+template <typename... Ts>
+class View;
+
 template <typename T>
-class View
+class View<T>
 {
 public:
     explicit View( detail::ComponentPool<T> &pool ) : mPool( pool ) {}
@@ -132,6 +136,61 @@ public:
 
 private:
     detail::ComponentPool<T> &mPool;
+};
+
+// Entities holding both A and B. Walks A's dense array and skips those
+// without a B, so pass the rarer component as A - the pass is O(count of A)
+// regardless of how many B there are.
+template <typename A, typename B>
+class View<A, B>
+{
+public:
+    View( detail::ComponentPool<A> &a, detail::ComponentPool<B> &b ) : mA( a ), mB( b ) {}
+
+    class Iterator
+    {
+    public:
+        Iterator( detail::ComponentPool<A> &a, detail::ComponentPool<B> &b, size_t index ) :
+            mA( a ), mB( b ), mIndex( index )
+        {
+            skipToMatch();
+        }
+
+        bool operator!=( const Iterator &other ) const { return mIndex != other.mIndex; }
+
+        Iterator &operator++()
+        {
+            ++mIndex;
+            skipToMatch();
+            return *this;
+        }
+
+        std::tuple<Entity, A &, B &> operator*() const
+        {
+            const Entity entity = mA.entityAt( mIndex );
+            return { entity, mA.componentAt( mIndex ), *mB.get( entity ) };
+        }
+
+    private:
+        // Leaves mIndex on an entity that has both, or at the end. That is
+        // what lets operator* dereference mB.get() without checking.
+        void skipToMatch()
+        {
+            while( mIndex < mA.size() && !mB.contains( mA.entityAt( mIndex ) ) )
+                ++mIndex;
+        }
+
+        detail::ComponentPool<A> &mA;
+        detail::ComponentPool<B> &mB;
+        size_t mIndex;
+    };
+
+    Iterator begin() const { return Iterator( mA, mB, 0 ); }
+    Iterator end() const { return Iterator( mA, mB, mA.size() ); }
+
+private:
+    detail::ComponentPool<A> &mA;
+    detail::ComponentPool<B> &mB;
 };
 
 // The ECS core: entity lifecycle plus per-type component storage. Nothing
@@ -211,12 +270,12 @@ public:
         return pool ? pool->get( entity ) : nullptr;
     }
 
-    // One component type per view; no "entities with both A and B"
-    // intersection until a real caller needs it.
-    template <typename T>
-    View<T> view()
+    // view<T>() for one component type, view<A, B>() for entities holding
+    // both. Pass the rarer type first - see View<A, B>.
+    template <typename... Ts>
+    View<Ts...> view()
     {
-        return View<T>( poolFor<T>() );
+        return View<Ts...>( poolFor<Ts>()... );
     }
 
 private:

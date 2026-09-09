@@ -17,11 +17,8 @@ namespace Rhiza
 // profiling ever disagrees.
 inline void renderSystem( Registry &registry, Engine &engine )
 {
-    for( auto [entity, renderer] : registry.view<MeshRenderer>() )
-    {
-        if( const Position *position = registry.getComponent<Position>( entity ) )
-            engine.setPosition( renderer.instance, position->value );
-    }
+    for( auto [entity, renderer, position] : registry.view<MeshRenderer, Position>() )
+        engine.setPosition( renderer.instance, position.value );
 }
 
 }  // namespace Rhiza
