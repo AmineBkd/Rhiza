@@ -7,6 +7,13 @@
 #include <Rhiza/Registry.h>
 #include <Rhiza/Shapes.h>
 #include <Rhiza/Systems/RenderSystem.h>
+#include <Rhiza/Types/Camera.h>
+#include <Rhiza/Types/Handles.h>
+#include <Rhiza/Types/Input.h>
+#include <Rhiza/Types/Light.h>
+#include <Rhiza/Types/Material.h>
+#include <Rhiza/Types/Math.h>
+#include <Rhiza/Types/Texture.h>
 
 #ifndef EXPANSUM_ASSET_DIR
 #    error "EXPANSUM_ASSET_DIR must be defined by CMake"

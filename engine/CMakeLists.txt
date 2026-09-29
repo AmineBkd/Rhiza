@@ -9,7 +9,7 @@ add_library(${PROJECT_NAME} STATIC
 
     src/core/Clock.cpp
     src/core/Shapes.cpp
-    src/core/Types.cpp
+    src/core/Math.cpp
     src/core/Clock.h
     src/core/NativeWindowHandle.h
 
@@ -24,7 +24,15 @@ add_library(${PROJECT_NAME} STATIC
     src/render/Renderer.h
 
     include/Rhiza/Engine.h
-    include/Rhiza/Types.h
+    include/Rhiza/Types/Camera.h
+    include/Rhiza/Types/EngineSettings.h
+    include/Rhiza/Types/Handles.h
+    include/Rhiza/Types/Input.h
+    include/Rhiza/Types/Light.h
+    include/Rhiza/Types/Material.h
+    include/Rhiza/Types/Math.h
+    include/Rhiza/Types/Mesh.h
+    include/Rhiza/Types/Texture.h
     include/Rhiza/Shapes.h
 )
 

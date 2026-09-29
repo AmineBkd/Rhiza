@@ -3,6 +3,7 @@
 #include <Rhiza/Components/MeshRenderer.h>
 #include <Rhiza/Engine.h>
 #include <Rhiza/Registry.h>
+#include <Rhiza/Types/Math.h>
 
 namespace Rhiza
 {

@@ -2,7 +2,7 @@
 
 #include <bitset>
 
-#include <Rhiza/Types.h>
+#include <Rhiza/Types/Input.h>
 
 namespace Rhiza
 {

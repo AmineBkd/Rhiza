@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Rhiza/Types.h>
+#include <Rhiza/Types/Handles.h>
 
 namespace Rhiza
 {

@@ -5,7 +5,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include <Rhiza/Types.h>
+#include <Rhiza/Types/Camera.h>
+#include <Rhiza/Types/EngineSettings.h>
+#include <Rhiza/Types/Light.h>
+#include <Rhiza/Types/Material.h>
+#include <Rhiza/Types/Math.h>
+#include <Rhiza/Types/Mesh.h>
+#include <Rhiza/Types/Texture.h>
 
 #include "core/NativeWindowHandle.h"
 

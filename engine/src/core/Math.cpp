@@ -1,4 +1,4 @@
-#include <Rhiza/Types.h>
+#include <Rhiza/Types/Math.h>
 
 #include <cmath>
 
