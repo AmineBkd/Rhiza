@@ -20,10 +20,30 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    # Without a binary cache every run rebuilds Ogre-Next and its
+    # dependencies from source, which is most of the ~45 minutes.
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-binary-cache,readwrite
+
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Get vcpkg commit
+        id: vcpkg-commit
+        shell: bash
+        run: |
+          mkdir -p "${{ github.workspace }}/vcpkg-binary-cache"
+          echo "sha=$(git -C third_party/vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-binary-cache
+          key: vcpkg-${{ matrix.preset }}-${{ steps.vcpkg-commit.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ matrix.preset }}-
 
       - name: Install Linux GL/X11 dev packages
         if: runner.os == 'Linux'
@@ -46,5 +66,17 @@ jobs:
       - name: Configure
         run: cmake --preset ${{ matrix.preset }} -DCMAKE_BUILD_TYPE=Release
 
+      # Saved straight after vcpkg has run, so a later compile or test
+      # failure doesn't throw the packages away.
+      - name: Save vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-binary-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --config Release
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
