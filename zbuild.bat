@@ -9,7 +9,7 @@ rem at build time rather than configure time, so it has to be passed to
 rem --build. Without it MSBuild picks Debug, which then needs the _d-suffixed
 rem OgreNext libraries - see RHIZA_DEBUG_BUILD in engine\src\render\Renderer.cpp.
 rem
-rem   zbuild.bat            -> Debug
+rem   zbuild.bat            -> RelWithDebInfo
 rem   zbuild.bat Release    -> Release
 
 set "config=%~1"

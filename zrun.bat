@@ -3,7 +3,7 @@ setlocal
 
 rem Runs the last build. Use zbuild.bat to build first.
 rem
-rem   zrun.bat              -> Debug
+rem   zrun.bat              -> RelWithDebInfo
 rem   zrun.bat Release      -> Release
 
 set "config=%~1"
