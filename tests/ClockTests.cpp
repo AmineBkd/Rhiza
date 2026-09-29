@@ -55,6 +55,9 @@ void testTimeScaleFreezesAndReverses()
 {
     std::printf( "time scale freeze and reverse:\n" );
     Rhiza::Clock clock;
+    // Without it, construct-then-tick can land inside one steady_clock tick
+    // and measure exactly zero.
+    std::this_thread::sleep_for( std::chrono::milliseconds( 1 ) );
     clock.tick();
 
     // Frozen: hitstop's core case. Real time must keep moving even though
