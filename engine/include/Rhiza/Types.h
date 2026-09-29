@@ -6,6 +6,12 @@
 namespace Rhiza
 {
 
+struct Vec2
+{
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
 struct Vec3
 {
     float x = 0.0f;
@@ -40,6 +46,9 @@ struct Vertex
     // Read only by ShadingModel::Lit. Unlit ignores it, so 2D/sprite
     // geometry can leave it at zero.
     Vec3 normal;
+
+    // (0,0) is the image's top-left, (1,1) its bottom-right.
+    Vec2 uv;
 };
 
 // Picks the shading path per material rather than globally, so a lit 3D

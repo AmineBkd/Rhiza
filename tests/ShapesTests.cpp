@@ -138,6 +138,31 @@ void testPlane()
     }
 }
 
+void testQuad()
+{
+    std::printf( "quad:\n" );
+    const Rhiza::MeshDesc quad = Rhiza::Shapes::quad( 2.0f, 4.0f );
+
+    checkIsTriangleList( quad, "quad" );
+    checkIndicesInRange( quad, "quad" );
+    checkNormalsAreUnitLength( quad, "quad" );
+
+    check( quad.vertices.size() == 4, "quad: has 4 vertices" );
+
+    for( const Rhiza::Vertex &v : quad.vertices )
+    {
+        check( std::fabs( v.position.z ) < 1e-5f, "quad: lies flat in the XY plane" );
+        check( std::fabs( v.normal.z - 1.0f ) < 1e-5f, "quad: faces +Z" );
+        check( std::fabs( std::fabs( v.position.x ) - 1.0f ) < 1e-5f, "quad: width 2" );
+        check( std::fabs( std::fabs( v.position.y ) - 2.0f ) < 1e-5f, "quad: height 4" );
+
+        // A texture must land upright: the top edge samples the image's top
+        // row (v = 0), the left edge its left column (u = 0).
+        check( ( v.position.y > 0.0f ) == ( v.uv.y == 0.0f ), "quad: top edge has v = 0" );
+        check( ( v.position.x < 0.0f ) == ( v.uv.x == 0.0f ), "quad: left edge has u = 0" );
+    }
+}
+
 void testScaling()
 {
     std::printf( "scaling:\n" );
@@ -159,6 +184,7 @@ int main()
 {
     testCube();
     testPlane();
+    testQuad();
     testScaling();
 
     if( gFailures == 0 )

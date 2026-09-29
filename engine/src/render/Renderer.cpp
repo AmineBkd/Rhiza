@@ -107,7 +107,14 @@ struct GpuVertex
 {
     float px, py, pz;
     float nx, ny, nz;
+    float u, v;
 };
+
+GpuVertex toGpuVertex( const Vertex &v )
+{
+    return { v.position.x, v.position.y, v.position.z, v.normal.x, v.normal.y, v.normal.z,
+             v.uv.x,       v.uv.y };
+}
 
 // A CPU-side buffer of data on its way to the GPU, freed when it leaves
 // scope - including when an Ogre call throws part-way through building a
@@ -187,6 +194,7 @@ Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoMa
     Ogre::VertexElement2Vec vertexElements;
     vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_POSITION ) );
     vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT3, Ogre::VES_NORMAL ) );
+    vertexElements.push_back( Ogre::VertexElement2( Ogre::VET_FLOAT2, Ogre::VES_TEXTURE_COORDINATES ) );
 
     const size_t numVertices = desc.vertices.size();
     const size_t numIndices = desc.indices.size();
@@ -196,8 +204,7 @@ Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoMa
     for( size_t i = 0; i < numVertices; ++i )
     {
         const Vertex &v = desc.vertices[i];
-        vertexData[i] = { v.position.x, v.position.y, v.position.z,
-                          v.normal.x,   v.normal.y,   v.normal.z };
+        vertexData[i] = toGpuVertex( v );
         outBounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
     }
 
@@ -527,11 +534,7 @@ void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
     {
         std::vector<GpuVertex> vertexData( desc.vertices.size() );
         for( size_t i = 0; i < desc.vertices.size(); ++i )
-        {
-            const Vertex &v = desc.vertices[i];
-            vertexData[i] = { v.position.x, v.position.y, v.position.z,
-                              v.normal.x,   v.normal.y,   v.normal.z };
-        }
+            vertexData[i] = toGpuVertex( desc.vertices[i] );
         vertexBuffers[0]->upload( vertexData.data(), 0, vertexData.size() );
         oldVao->getIndexBuffer()->upload( desc.indices.data(), 0, desc.indices.size() );
 

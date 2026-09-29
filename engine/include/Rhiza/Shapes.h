@@ -16,4 +16,8 @@ MeshDesc cube( float size = 1.0f );
 // A flat square in the XZ plane centred on the origin, facing up (+Y).
 MeshDesc plane( float size = 1.0f );
 
+// A rectangle in the XY plane centred on the origin, facing the default
+// camera (+Z). The sprite primitive.
+MeshDesc quad( float width = 1.0f, float height = 1.0f );
+
 }  // namespace Rhiza::Shapes

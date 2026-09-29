@@ -8,16 +8,16 @@ namespace
 
 // Appends one quad as two triangles, all four corners sharing `normal`.
 // Corners go counter-clockwise seen from outside - the winding Ogre-Next
-// treats as front-facing.
+// treats as front-facing - starting bottom-left, so textures land upright.
 void addQuad( MeshDesc &mesh, const Vec3 &a, const Vec3 &b, const Vec3 &c, const Vec3 &d,
               const Vec3 &normal )
 {
     const uint16_t base = static_cast<uint16_t>( mesh.vertices.size() );
 
-    mesh.vertices.push_back( { a, normal } );
-    mesh.vertices.push_back( { b, normal } );
-    mesh.vertices.push_back( { c, normal } );
-    mesh.vertices.push_back( { d, normal } );
+    mesh.vertices.push_back( { a, normal, { 0.0f, 1.0f } } );
+    mesh.vertices.push_back( { b, normal, { 1.0f, 1.0f } } );
+    mesh.vertices.push_back( { c, normal, { 1.0f, 0.0f } } );
+    mesh.vertices.push_back( { d, normal, { 0.0f, 0.0f } } );
 
     mesh.indices.insert( mesh.indices.end(), {
         static_cast<uint16_t>( base + 0 ), static_cast<uint16_t>( base + 1 ),
@@ -62,6 +62,19 @@ MeshDesc plane( float size )
     mesh.indices.reserve( 6 );
 
     addQuad( mesh, { -h, 0, h }, { h, 0, h }, { h, 0, -h }, { -h, 0, -h }, { 0, 1, 0 } );
+
+    return mesh;
+}
+
+MeshDesc quad( float width, float height )
+{
+    const float hw = width * 0.5f;
+    const float hh = height * 0.5f;
+    MeshDesc mesh;
+    mesh.vertices.reserve( 4 );
+    mesh.indices.reserve( 6 );
+
+    addQuad( mesh, { -hw, -hh, 0 }, { hw, -hh, 0 }, { hw, hh, 0 }, { -hw, hh, 0 }, { 0, 0, 1 } );
 
     return mesh;
 }
