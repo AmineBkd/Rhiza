@@ -145,6 +145,12 @@ namespace Rhiza
             mImpl->renderer.setPosition( handle.id, position );
     }
 
+    void Engine::setTransform( InstanceHandle handle, const Transform &transform )
+    {
+        if( mImpl && handle.isValid() )
+            mImpl->renderer.setTransform( handle.id, transform );
+    }
+
     LightHandle Engine::createLight( const LightDesc &desc )
     {
         LightHandle handle;

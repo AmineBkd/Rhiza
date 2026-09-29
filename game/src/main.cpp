@@ -1,5 +1,4 @@
 #include <Rhiza/Components/MeshRenderer.h>
-#include <Rhiza/Components/Position.h>
 #include <Rhiza/Engine.h>
 #include <Rhiza/Registry.h>
 #include <Rhiza/Shapes.h>
@@ -17,7 +16,7 @@ int main( int argc, char *argv[] )
     auto spawn = [&]( Rhiza::MeshHandle mesh, Rhiza::MaterialHandle material,
                       Rhiza::Vec3 position ) {
         const Rhiza::Entity entity = registry.createEntity();
-        registry.addComponent( entity, Rhiza::Position{ position } );
+        registry.addComponent( entity, Rhiza::Transform{ position } );
         registry.addComponent(
             entity, Rhiza::MeshRenderer{ mesh, material, engine.createInstance( mesh, material ) } );
         return entity;
@@ -88,16 +87,16 @@ int main( int argc, char *argv[] )
 
         constexpr float unitsPerSecond = 3.0f;
         const float step = unitsPerSecond * engine.deltaSeconds();
-        if( Rhiza::Position *position = registry.getComponent<Rhiza::Position>( flatCube ) )
+        if( Rhiza::Transform *transform = registry.getComponent<Rhiza::Transform>( flatCube ) )
         {
             if( engine.isKeyDown( Rhiza::Key::Left ) )
-                position->value.x -= step;
+                transform->position.x -= step;
             if( engine.isKeyDown( Rhiza::Key::Right ) )
-                position->value.x += step;
+                transform->position.x += step;
             if( engine.isKeyDown( Rhiza::Key::Up ) )
-                position->value.z -= step;
+                transform->position.z -= step;
             if( engine.isKeyDown( Rhiza::Key::Down ) )
-                position->value.z += step;
+                transform->position.z += step;
         }
 
         // Systems run in the order this loop calls them; the render bridge

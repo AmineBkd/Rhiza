@@ -61,6 +61,7 @@ public:
     void destroyInstance( uint32_t handle );
 
     void setPosition( uint32_t handle, Vec3 position );
+    void setTransform( uint32_t handle, const Transform &transform );
 
     uint32_t createLight( const LightDesc &desc );
     void destroyLight( uint32_t handle );

@@ -9,6 +9,7 @@ add_library(${PROJECT_NAME} STATIC
 
     src/core/Clock.cpp
     src/core/Shapes.cpp
+    src/core/Types.cpp
     src/core/Clock.h
     src/core/NativeWindowHandle.h
 

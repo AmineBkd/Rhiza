@@ -72,6 +72,7 @@ public:
     void destroyInstance(InstanceHandle instance);
 
     void setPosition(InstanceHandle handle, Vec3 position);
+    void setTransform(InstanceHandle handle, const Transform &transform);
 
     // Only ShadingModel::Lit materials respond to lights.
     LightHandle createLight(const LightDesc &desc);

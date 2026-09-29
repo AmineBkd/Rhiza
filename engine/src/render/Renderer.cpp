@@ -267,6 +267,11 @@ Ogre::ColourValue toOgre( const Color &c )
     return Ogre::ColourValue( c.r, c.g, c.b, c.a );
 }
 
+Ogre::Quaternion toOgre( const Quat &q )
+{
+    return Ogre::Quaternion( q.w, q.x, q.y, q.z );
+}
+
 }  // namespace
 
 Renderer::~Renderer()
@@ -688,6 +693,18 @@ void Renderer::setPosition( uint32_t handle, Vec3 position )
     if( it == mInstances.end() )
         return;
     it->second.node->setPosition( position.x, position.y, position.z );
+}
+
+void Renderer::setTransform( uint32_t handle, const Transform &transform )
+{
+    auto it = mInstances.find( handle );
+    if( it == mInstances.end() )
+        return;
+
+    Ogre::SceneNode *node = it->second.node;
+    node->setPosition( toOgre( transform.position ) );
+    node->setOrientation( toOgre( transform.rotation ) );
+    node->setScale( toOgre( transform.scale ) );
 }
 
 Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
