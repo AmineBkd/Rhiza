@@ -68,6 +68,7 @@ public:
 
     void setAmbientLight( const Color &skyColor, const Color &groundColor );
     void setCamera( Vec3 position, Vec3 target );
+    void setCamera( const CameraDesc &camera );
 
 private:
     // Split out so one try/catch at the call site covers every Ogre call in

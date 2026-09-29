@@ -83,7 +83,9 @@ public:
     // two colours by how far a surface tilts toward sky or ground.
     void setAmbientLight(Color skyColor, Color groundColor);
 
+    // Look-at; leaves the projection as it was.
     void setCamera(Vec3 position, Vec3 target);
+    void setCamera(const CameraDesc &camera);
 
     // Keys are identified by physical position - see Key in Types.h.
     // wasKeyPressed/Released are true only on the frame of the transition;

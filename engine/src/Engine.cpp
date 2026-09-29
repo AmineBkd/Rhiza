@@ -177,6 +177,12 @@ namespace Rhiza
             mImpl->renderer.setCamera( position, target );
     }
 
+    void Engine::setCamera( const CameraDesc &camera )
+    {
+        if( mImpl )
+            mImpl->renderer.setCamera( camera );
+    }
+
     bool Engine::isKeyDown( Key key ) const
     {
         return mImpl && mImpl->input.isKeyDown( key );

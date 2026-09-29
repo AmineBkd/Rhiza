@@ -803,4 +803,19 @@ void Renderer::setCamera( Vec3 position, Vec3 target )
     mCamera->lookAt( toOgre( target ) );
 }
 
+void Renderer::setCamera( const CameraDesc &camera )
+{
+    const bool ortho = camera.projection == Projection::Orthographic;
+    mCamera->setProjectionType( ortho ? Ogre::PT_ORTHOGRAPHIC : Ogre::PT_PERSPECTIVE );
+    if( ortho )
+        mCamera->setOrthoWindowHeight( camera.orthoHeight );
+    else
+        mCamera->setFOVy( Ogre::Degree( camera.fovYDegrees ) );
+
+    mCamera->setNearClipDistance( camera.nearClip );
+    mCamera->setFarClipDistance( camera.farClip );
+    mCamera->setPosition( toOgre( camera.position ) );
+    mCamera->setOrientation( toOgre( camera.orientation ) );
+}
+
 }  // namespace Rhiza

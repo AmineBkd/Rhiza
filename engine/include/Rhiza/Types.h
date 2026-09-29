@@ -115,6 +115,31 @@ struct Transform
     Vec3 scale{ 1.0f, 1.0f, 1.0f };
 };
 
+enum class Projection
+{
+    Perspective,
+    Orthographic,
+};
+
+// Camera behaviour (follow, shake, zoom) lives above the engine and
+// produces one of these per frame.
+struct CameraDesc
+{
+    Projection projection = Projection::Perspective;
+    Vec3 position{ 0.0f, 0.0f, 10.0f };
+
+    // Identity looks down -Z with +Y up.
+    Quat orientation;
+
+    float fovYDegrees = 45.0f;
+
+    // World units visible top to bottom; width follows the aspect ratio.
+    float orthoHeight = 10.0f;
+
+    float nearClip = 0.1f;
+    float farClip = 1000.0f;
+};
+
 // Opaque references to things the engine owns. They carry no usable
 // information; they only identify which object a later call means.
 struct InstanceHandle
