@@ -25,6 +25,11 @@
 #include "Vao/OgreVaoManager.h"
 #include "Vao/OgreVertexArrayObject.h"
 #include "OgreLight.h"
+#include "OgreImage2.h"
+#include "OgreTextureGpu.h"
+#include "OgreTextureGpuManager.h"
+#include "OgreTextureFilters.h"
+#include "OgreHlmsSamplerblock.h"
 #include "Hlms/Unlit/OgreHlmsUnlit.h"
 #include "Hlms/Unlit/OgreHlmsUnlitDatablock.h"
 #include "Hlms/Pbs/OgreHlmsPbs.h"
@@ -279,6 +284,30 @@ Ogre::Quaternion toOgre( const Quat &q )
     return Ogre::Quaternion( q.w, q.x, q.y, q.z );
 }
 
+Ogre::HlmsSamplerblock toSamplerblock( const TextureDesc &desc )
+{
+    Ogre::HlmsSamplerblock samplerblock;
+    if( desc.filter == TextureFilter::Nearest )
+    {
+        samplerblock.mMinFilter = Ogre::FO_POINT;
+        samplerblock.mMagFilter = Ogre::FO_POINT;
+        samplerblock.mMipFilter = Ogre::FO_NONE;
+    }
+    else
+    {
+        samplerblock.mMinFilter = Ogre::FO_LINEAR;
+        samplerblock.mMagFilter = Ogre::FO_LINEAR;
+        samplerblock.mMipFilter = Ogre::FO_LINEAR;
+    }
+
+    const Ogre::TextureAddressingMode mode =
+        desc.wrap == TextureWrap::Repeat ? Ogre::TAM_WRAP : Ogre::TAM_CLAMP;
+    samplerblock.mU = mode;
+    samplerblock.mV = mode;
+    samplerblock.mW = mode;
+    return samplerblock;
+}
+
 }  // namespace
 
 Renderer::~Renderer()
@@ -409,6 +438,7 @@ void Renderer::shutdown()
     // only need forgetting, not individually destroying.
     mMeshAssets.clear();
     mMaterials.clear();
+    mTextures.clear();
     mInstances.clear();
     mLights.clear();
 
@@ -599,14 +629,87 @@ void Renderer::destroyMeshAsset( uint32_t handle )
     mMeshAssets.erase( it );
 }
 
+uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std::string &sourceName,
+                                  const TextureDesc &desc )
+{
+    // Ogre's streaming thread uploads and deletes it later.
+    Ogre::Image2 *image = new Ogre::Image2();
+    try
+    {
+        Ogre::DataStreamPtr stream( OGRE_NEW Ogre::MemoryDataStream(
+            const_cast<uint8_t *>( encoded.data() ), encoded.size(), false, true ) );
+        image->load2( stream, sourceName );
+    }
+    catch( Ogre::Exception &e )
+    {
+        delete image;
+        logError( "could not decode texture '" + sourceName + "': " + e.getDescription() );
+        return 0;
+    }
+
+    const uint32_t handle = mNextHandle++;
+    const Ogre::String name = "RhizaTexture_" + Ogre::StringConverter::toString( handle );
+
+    const Ogre::uint32 filters = desc.filter == TextureFilter::Linear
+                                     ? Ogre::TextureFilter::TypeGenerateDefaultMipmaps
+                                     : 0u;
+
+    // Not sRGB: the backbuffer isn't either, so pixels come out as authored.
+    Ogre::TextureGpuManager *textureManager = mRoot->getRenderSystem()->getTextureGpuManager();
+    Ogre::TextureGpu *texture = textureManager->createTexture(
+        name, Ogre::GpuPageOutStrategy::Discard, Ogre::TextureFlags::AutomaticBatching,
+        Ogre::TextureTypes::Type2D, Ogre::BLANKSTRING, filters );
+    texture->scheduleTransitionTo( Ogre::GpuResidency::Resident, image );
+
+    TextureAsset asset;
+    asset.texture = texture;
+    asset.desc = desc;
+    mTextures[handle] = asset;
+
+    return handle;
+}
+
+void Renderer::destroyTexture( uint32_t handle )
+{
+    auto it = mTextures.find( handle );
+    if( it == mTextures.end() )
+        return;
+
+    if( it->second.materialRefCount != 0 )
+    {
+        logError( "destroyTexture refused: '" + it->second.texture->getNameStr() + "' still has " +
+                  std::to_string( it->second.materialRefCount ) + " material(s) referencing it" );
+        return;
+    }
+
+    mRoot->getRenderSystem()->getTextureGpuManager()->destroyTexture( it->second.texture );
+    mTextures.erase( it );
+}
+
 uint32_t Renderer::createMaterial( const MaterialDesc &desc )
 {
+    TextureAsset *texture = nullptr;
+    if( desc.texture.isValid() )
+    {
+        auto textureIt = mTextures.find( desc.texture.id );
+        if( textureIt == mTextures.end() )
+        {
+            logError( "createMaterial given a texture handle that does not exist" );
+            return 0;
+        }
+        texture = &textureIt->second;
+    }
+
     const uint32_t handle = mNextHandle++;
     const Ogre::String name = "RhizaMaterial_" + Ogre::StringConverter::toString( handle );
 
     MaterialAsset asset;
-    asset.datablock = createDatablock( name, desc );
+    asset.datablock = createDatablock( name, desc, texture );
+    asset.textureHandle = desc.texture.id;
     mMaterials[handle] = asset;
+
+    if( texture )
+        ++texture->materialRefCount;
 
     return handle;
 }
@@ -626,6 +729,11 @@ void Renderer::destroyMaterial( uint32_t handle )
 
     Ogre::HlmsDatablock *datablock = it->second.datablock;
     datablock->getCreator()->destroyDatablock( datablock->getName() );
+
+    auto textureIt = mTextures.find( it->second.textureHandle );
+    if( textureIt != mTextures.end() )
+        --textureIt->second.materialRefCount;
+
     mMaterials.erase( it );
 }
 
@@ -711,13 +819,25 @@ void Renderer::setTransform( uint32_t handle, const Transform &transform )
 }
 
 Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
-                                                const MaterialDesc &material )
+                                                const MaterialDesc &material,
+                                                const TextureAsset *texture )
 {
     // Culling stays off unless the material opts in, since winding is only
     // trustworthy when the caller promised it. CULL_CLOCKWISE is Ogre's
     // default and, confusingly, means "keep anticlockwise faces".
     Ogre::HlmsMacroblock macroblock;
     macroblock.mCullMode = material.doubleSided ? Ogre::CULL_NONE : Ogre::CULL_CLOCKWISE;
+    macroblock.mDepthWrite = material.blend == BlendMode::Opaque;
+
+    Ogre::HlmsBlendblock blendblock;
+    if( material.blend == BlendMode::AlphaBlend )
+        blendblock.setBlendType( Ogre::SBT_TRANSPARENT_ALPHA );
+    else if( material.blend == BlendMode::Additive )
+        blendblock.setBlendType( Ogre::SBT_ADD );
+
+    Ogre::HlmsSamplerblock samplerblock;
+    if( texture )
+        samplerblock = toSamplerblock( texture->desc );
 
     Ogre::HlmsManager *hlmsManager = mRoot->getHlmsManager();
 
@@ -728,11 +848,13 @@ Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
 
         Ogre::HlmsUnlitDatablock *datablock =
             static_cast<Ogre::HlmsUnlitDatablock *>( hlmsUnlit->createDatablock(
-                name, name, macroblock, Ogre::HlmsBlendblock(), Ogre::HlmsParamVec() ) );
+                name, name, macroblock, blendblock, Ogre::HlmsParamVec() ) );
 
         // Unlit ignores its colour entirely unless told to use it.
         datablock->setUseColour( true );
         datablock->setColour( toOgre( material.color ) );
+        if( texture )
+            datablock->setTexture( 0, texture->texture, &samplerblock );
         return datablock;
     }
 
@@ -740,7 +862,7 @@ Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
 
     Ogre::HlmsPbsDatablock *datablock =
         static_cast<Ogre::HlmsPbsDatablock *>( hlmsPbs->createDatablock(
-            name, name, macroblock, Ogre::HlmsBlendblock(), Ogre::HlmsParamVec() ) );
+            name, name, macroblock, blendblock, Ogre::HlmsParamVec() ) );
 
     // setMetalness is only respected under the metallic workflow; in the
     // default specular workflow it is silently ignored.
@@ -748,6 +870,13 @@ Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
     datablock->setDiffuse( Ogre::Vector3( material.color.r, material.color.g, material.color.b ) );
     datablock->setRoughness( material.roughness );
     datablock->setMetalness( material.metalness );
+    if( texture )
+        datablock->setTexture( Ogre::PBSM_DIFFUSE, texture->texture, &samplerblock );
+
+    // Pbs outputs alpha 1 regardless of the blendblock until given a
+    // transparency mode; Fade is plain alpha blending.
+    if( material.blend == BlendMode::AlphaBlend )
+        datablock->setTransparency( material.color.a, Ogre::HlmsPbsDatablock::Fade );
     return datablock;
 }
 

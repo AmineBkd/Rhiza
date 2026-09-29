@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <Rhiza/Types.h>
 
@@ -19,6 +20,7 @@ class SceneNode;
 class Item;
 class Light;
 class HlmsDatablock;
+class TextureGpu;
 }  // namespace Ogre
 
 namespace Rhiza
@@ -55,6 +57,13 @@ public:
     void destroyMeshAsset( uint32_t handle );
     void destroyMaterial( uint32_t handle );
 
+    // `encoded` is the file's bytes, not decoded pixels.
+    uint32_t createTexture( const std::vector<uint8_t> &encoded, const std::string &sourceName,
+                            const TextureDesc &desc );
+
+    // Refuses (and logs) while any material still references it.
+    void destroyTexture( uint32_t handle );
+
     uint32_t createMaterial( const MaterialDesc &desc );
 
     uint32_t createInstance( uint32_t meshHandle, uint32_t materialHandle );
@@ -80,8 +89,16 @@ private:
     // scene may mix them freely.
     void registerHlms();
 
+    struct TextureAsset
+    {
+        Ogre::TextureGpu *texture = nullptr;
+        TextureDesc desc;
+        uint32_t materialRefCount = 0;
+    };
+
     // `name` must be unique across the whole Hlms manager.
-    Ogre::HlmsDatablock *createDatablock( const std::string &name, const MaterialDesc &material );
+    Ogre::HlmsDatablock *createDatablock( const std::string &name, const MaterialDesc &material,
+                                          const TextureAsset *texture );
 
     // Tracked by name rather than an Ogre::MeshPtr so this header doesn't
     // need Ogre's mesh headers.
@@ -98,6 +115,7 @@ private:
     struct MaterialAsset
     {
         Ogre::HlmsDatablock *datablock = nullptr;
+        uint32_t textureHandle = 0;
         uint32_t instanceRefCount = 0;
     };
 
@@ -130,6 +148,7 @@ private:
     uint32_t mNextHandle = 1;
     std::unordered_map<uint32_t, MeshAsset> mMeshAssets;
     std::unordered_map<uint32_t, MaterialAsset> mMaterials;
+    std::unordered_map<uint32_t, TextureAsset> mTextures;
     std::unordered_map<uint32_t, Instance> mInstances;
     std::unordered_map<uint32_t, LightInstance> mLights;
 };

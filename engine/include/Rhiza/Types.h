@@ -51,6 +51,32 @@ struct Vertex
     Vec2 uv;
 };
 
+enum class TextureFilter
+{
+    Linear,
+    Nearest,
+};
+
+enum class TextureWrap
+{
+    Clamp,
+    Repeat,
+};
+
+struct TextureDesc
+{
+    TextureFilter filter = TextureFilter::Linear;
+    TextureWrap wrap = TextureWrap::Clamp;
+};
+
+// Non-opaque modes write no depth and cost full overdraw per layer.
+enum class BlendMode
+{
+    Opaque,
+    AlphaBlend,
+    Additive,
+};
+
 // Picks the shading path per material rather than globally, so a lit 3D
 // world with a flat 2D HUD over it is the normal case. Maps onto Ogre-Next's
 // two Hlms implementations: Lit -> HlmsPbs, Unlit -> HlmsUnlit ("great for
@@ -62,10 +88,23 @@ enum class ShadingModel
     Unlit,
 };
 
+struct TextureHandle
+{
+    uint32_t id = 0;
+
+    bool isValid() const { return id != 0; }
+};
+
 struct MaterialDesc
 {
     ShadingModel shading = ShadingModel::Lit;
+
+    // Tints the texture; white leaves it as authored.
     Color color;
+
+    TextureHandle texture;
+
+    BlendMode blend = BlendMode::Opaque;
 
     // Lit only. 0 = mirror-smooth, 1 = fully diffuse.
     float roughness = 0.6f;

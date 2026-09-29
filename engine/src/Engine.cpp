@@ -1,5 +1,6 @@
 #include <Rhiza/Engine.h>
 #include "core/Clock.h"
+#include "platform/FileSystem.h"
 #include "platform/Input.h"
 #include "render/Renderer.h"
 #include "platform/Window.h"
@@ -109,6 +110,21 @@ namespace Rhiza
     {
         if( mImpl && mesh.isValid() )
             mImpl->renderer.destroyMeshAsset( mesh.id );
+    }
+
+    TextureHandle Engine::loadTexture( const char *path, const TextureDesc &desc )
+    {
+        TextureHandle handle;
+        std::vector<uint8_t> encoded;
+        if( mImpl && readFile( path, encoded ) )
+            handle.id = mImpl->renderer.createTexture( encoded, path, desc );
+        return handle;
+    }
+
+    void Engine::destroyTexture( TextureHandle texture )
+    {
+        if( mImpl && texture.isValid() )
+            mImpl->renderer.destroyTexture( texture.id );
     }
 
     MaterialHandle Engine::createMaterial( const MaterialDesc &desc )

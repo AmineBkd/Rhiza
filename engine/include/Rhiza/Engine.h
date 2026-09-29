@@ -60,6 +60,12 @@ public:
     // Refused while any instance still references it.
     void destroyMeshAsset(MeshHandle mesh);
 
+    // PNG, JPG, TGA - anything FreeImage decodes.
+    TextureHandle loadTexture(const char *path, const TextureDesc &desc = {});
+
+    // Refused while any material still references it.
+    void destroyTexture(TextureHandle texture);
+
     // A material (Ogre's "datablock"), shared across instances like a mesh.
     MaterialHandle createMaterial(const MaterialDesc &desc);
 

@@ -15,8 +15,10 @@ add_library(${PROJECT_NAME} STATIC
 
     src/platform/Window.cpp
     src/platform/Input.cpp
+    src/platform/FileSystem.cpp
     src/platform/Window.h
     src/platform/Input.h
+    src/platform/FileSystem.h
 
     src/render/Renderer.cpp
     src/render/Renderer.h
