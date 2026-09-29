@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -280,6 +281,38 @@ void testAddingTwiceReplaces()
     check( afterRemove == 0, "nothing left to visit after removing it" );
 }
 
+void testOnRemove()
+{
+    std::printf( "onRemove runs whenever a component leaves:\n" );
+    Rhiza::Registry registry;
+
+    std::vector<float> removed;
+    registry.onRemove<Position>( [&]( Rhiza::Entity, Position &p ) { removed.push_back( p.x ); } );
+
+    const Rhiza::Entity a = registry.createEntity();
+    const Rhiza::Entity b = registry.createEntity();
+    const Rhiza::Entity c = registry.createEntity();
+    registry.addComponent( a, Position{ 1.0f, 0.0f } );
+    registry.addComponent( b, Position{ 2.0f, 0.0f } );
+    registry.addComponent( c, Position{ 3.0f, 0.0f } );
+    registry.addComponent( c, Velocity{ 9.0f, 9.0f } );
+
+    registry.removeComponent<Position>( a );
+    check( removed.size() == 1 && removed[0] == 1.0f, "fires on removeComponent with its data" );
+
+    registry.addComponent( b, Position{ 20.0f, 0.0f } );
+    check( removed.size() == 2 && removed[1] == 2.0f, "fires on replace with the old data" );
+
+    registry.destroyEntity( c );
+    check( removed.size() == 3 && removed[2] == 3.0f, "fires on destroyEntity, once" );
+
+    registry.removeComponent<Position>( a );
+    check( removed.size() == 3, "does not fire for a component already gone" );
+
+    const Position *survivor = registry.getComponent<Position>( b );
+    check( survivor != nullptr && survivor->x == 20.0f, "swap-and-pop still intact after hooks" );
+}
+
 }  // namespace
 
 int main()
@@ -292,6 +325,7 @@ int main()
     testView();
     testPairView();
     testAddingTwiceReplaces();
+    testOnRemove();
 
     if( gFailures == 0 )
     {

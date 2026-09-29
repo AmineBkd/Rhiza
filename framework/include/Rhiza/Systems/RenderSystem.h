@@ -15,6 +15,15 @@ namespace Rhiza
 // unconditionally rather than tracking what moved: correct at the hundreds
 // of entities this targets, and a dirty flag is the fix if profiling ever
 // disagrees.
+// Call once at startup. Destroys an entity's instance with its MeshRenderer;
+// the mesh and material are shared, so they stay.
+inline void connectRenderSystem( Registry &registry, Engine &engine )
+{
+    registry.onRemove<MeshRenderer>( [&engine]( Entity, MeshRenderer &renderer ) {
+        engine.destroyInstance( renderer.instance );
+    } );
+}
+
 inline void renderSystem( Registry &registry, Engine &engine )
 {
     for( auto [entity, renderer, transform] : registry.view<MeshRenderer, Transform>() )

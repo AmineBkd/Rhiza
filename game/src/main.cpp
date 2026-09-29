@@ -38,6 +38,7 @@ int main( int argc, char *argv[] )
         return 1;
 
     Rhiza::Registry registry;
+    Rhiza::connectRenderSystem( registry, engine );
 
     auto spawn = [&]( Rhiza::MeshHandle mesh, Rhiza::MaterialHandle material,
                       const Rhiza::Transform &transform ) {

@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <tuple>
 #include <typeindex>
@@ -42,6 +43,8 @@ public:
     {
         if( T *existing = get( entity ) )
         {
+            if( mOnRemove )
+                mOnRemove( entity, *existing );
             *existing = std::move( component );
             return *existing;
         }
@@ -62,6 +65,9 @@ public:
             return;
 
         const size_t removedIndex = mSparse[entity.index];
+        if( mOnRemove )
+            mOnRemove( entity, mDense[removedIndex] );
+
         const size_t lastIndex = mDense.size() - 1;
 
         mDense[removedIndex] = std::move( mDense[lastIndex] );
@@ -95,12 +101,15 @@ public:
     Entity entityAt( size_t denseIndex ) const { return mDenseEntities[denseIndex]; }
     T &componentAt( size_t denseIndex ) { return mDense[denseIndex]; }
 
+    void setOnRemove( std::function<void( Entity, T & )> callback ) { mOnRemove = std::move( callback ); }
+
 private:
     static constexpr size_t kInvalidDenseIndex = static_cast<size_t>( -1 );
 
     std::vector<size_t> mSparse;         // entity.index -> dense index
     std::vector<Entity> mDenseEntities;  // dense index -> owning entity
     std::vector<T> mDense;               // the packed components themselves
+    std::function<void( Entity, T & )> mOnRemove;
 };
 
 }  // namespace detail
@@ -250,6 +259,15 @@ public:
     {
         assert( isAlive( entity ) && "addComponent on a dead or invalid entity" );
         return poolFor<T>().insert( entity, std::move( component ) );
+    }
+
+    // Runs whenever a T is removed, replaced, or its entity destroyed - but
+    // not by ~Registry, whose callees may already be gone. One per type;
+    // must not add or remove a T itself.
+    template <typename T>
+    void onRemove( std::function<void( Entity, T & )> callback )
+    {
+        poolFor<T>().setOnRemove( std::move( callback ) );
     }
 
     template <typename T>
