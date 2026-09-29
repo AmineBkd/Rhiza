@@ -1,113 +1,162 @@
+#include <algorithm>
+#include <cmath>
+#include <string>
+
 #include <Rhiza/Components/MeshRenderer.h>
 #include <Rhiza/Engine.h>
 #include <Rhiza/Registry.h>
 #include <Rhiza/Shapes.h>
 #include <Rhiza/Systems/RenderSystem.h>
 
+#ifndef EXPANSUM_ASSET_DIR
+#    error "EXPANSUM_ASSET_DIR must be defined by CMake"
+#endif
+
+namespace
+{
+
+std::string asset( const char *name )
+{
+    return std::string( EXPANSUM_ASSET_DIR ) + "/" + name;
+}
+
+constexpr Rhiza::Vec3 kZAxis{ 0.0f, 0.0f, 1.0f };
+
+struct Spin
+{
+    Rhiza::Vec3 axis;
+    float radiansPerSecond = 0.0f;
+    float angle = 0.0f;
+};
+
+}  // namespace
+
 int main( int argc, char *argv[] )
 {
     Rhiza::Engine engine;
-    Rhiza::EngineSettings settings;
-    if( !engine.initialize( settings ) )
+    if( !engine.initialize() )
         return 1;
 
     Rhiza::Registry registry;
 
     auto spawn = [&]( Rhiza::MeshHandle mesh, Rhiza::MaterialHandle material,
-                      Rhiza::Vec3 position ) {
+                      const Rhiza::Transform &transform ) {
         const Rhiza::Entity entity = registry.createEntity();
-        registry.addComponent( entity, Rhiza::Transform{ position } );
+        registry.addComponent( entity, transform );
         registry.addComponent(
             entity, Rhiza::MeshRenderer{ mesh, material, engine.createInstance( mesh, material ) } );
         return entity;
     };
 
     Rhiza::LightDesc sun;
-    sun.type = Rhiza::LightType::Directional;
-    sun.direction = { -1.0f, -1.5f, -0.8f };
+    sun.direction = { -1.0f, -1.5f, -2.0f };
     engine.createLight( sun );
 
-    // One mesh asset, uploaded once, instantiated twice below with two
-    // different materials.
-    Rhiza::MeshHandle cubeMesh = engine.createMeshAsset( Rhiza::Shapes::cube( 2.0f ) );
+    const Rhiza::MeshHandle quad = engine.createMeshAsset( Rhiza::Shapes::quad() );
 
-    Rhiza::MaterialDesc litMaterial;
-    litMaterial.shading = Rhiza::ShadingModel::Lit;
-    litMaterial.color = { 0.1f, 0.3f, 0.2f, 1.0f };
-    litMaterial.roughness = 0.5f;
-    spawn( cubeMesh, engine.createMaterial( litMaterial ), { 0.0f, 0.0f, 0.0f } );
+    Rhiza::TextureDesc pixelArt;
+    pixelArt.filter = Rhiza::TextureFilter::Nearest;
 
-    // The same mesh, unlit: flat colour, ignoring the light entirely.
-    Rhiza::MaterialDesc unlitMaterial;
-    unlitMaterial.shading = Rhiza::ShadingModel::Unlit;
-    unlitMaterial.color = { 0.9f, 0.3f, 0.2f, 1.0f };
-    const Rhiza::Entity flatCube =
-        spawn( cubeMesh, engine.createMaterial( unlitMaterial ), { -3.5f, 0.0f, 0.0f } );
+    Rhiza::MaterialDesc shipMaterial;
+    shipMaterial.shading = Rhiza::ShadingModel::Unlit;
+    shipMaterial.texture = engine.loadTexture( asset( "ship.png" ).c_str(), pixelArt );
+    shipMaterial.blend = Rhiza::BlendMode::AlphaBlend;
+    const Rhiza::Entity ship = spawn( quad, engine.createMaterial( shipMaterial ),
+                                      { { 0.0f, 0.0f, 1.0f }, {}, { 1.5f, 1.5f, 1.0f } } );
 
-    Rhiza::MeshHandle groundMesh = engine.createMeshAsset( Rhiza::Shapes::plane( 20.0f ) );
-    Rhiza::MaterialDesc groundMaterial;
-    groundMaterial.color = { 0.35f, 0.38f, 0.4f, 1.0f };
-    groundMaterial.roughness = 0.9f;
-    spawn( groundMesh, engine.createMaterial( groundMaterial ), { 0.0f, -1.5f, 0.0f } );
+    Rhiza::MaterialDesc flameMaterial;
+    flameMaterial.shading = Rhiza::ShadingModel::Unlit;
+    flameMaterial.color = { 1.0f, 0.55f, 0.15f, 1.0f };
+    flameMaterial.texture = engine.loadTexture( asset( "glow.png" ).c_str() );
+    flameMaterial.blend = Rhiza::BlendMode::Additive;
+    const Rhiza::Entity flame = spawn( quad, engine.createMaterial( flameMaterial ), {} );
 
-    // No control system yet - plain game code reading input directly. The
-    // camera's position and target aren't queryable from Engine, so they're
-    // tracked here and shifted by the same delta, which pans the view without
-    // changing its angle.
-    Rhiza::Vec3 cameraPosition = settings.cameraPosition;
-    Rhiza::Vec3 cameraTarget = settings.cameraTarget;
+    // Lit 3D objects in the 2D scene.
+    const Rhiza::MeshHandle cube = engine.createMeshAsset( Rhiza::Shapes::cube() );
+    Rhiza::MaterialDesc rockDesc;
+    rockDesc.color = { 0.45f, 0.4f, 0.38f, 1.0f };
+    rockDesc.roughness = 0.9f;
+    const Rhiza::MaterialHandle rockMaterial = engine.createMaterial( rockDesc );
+
+    const Rhiza::Vec3 spinAxes[] = { { 0.6f, 0.8f, 0.0f }, { 0.0f, 0.6f, 0.8f }, { 0.8f, 0.0f, 0.6f } };
+    for( int i = 0; i < 8; ++i )
+    {
+        const float around = static_cast<float>( i ) * 0.785f;
+        const float size = 0.8f + 0.1f * static_cast<float>( i );
+        const Rhiza::Entity rock =
+            spawn( cube, rockMaterial,
+                   { { std::cos( around ) * 7.0f, std::sin( around ) * 7.0f, 0.0f }, {}, { size, size, size } } );
+        registry.addComponent( rock, Spin{ spinAxes[i % 3], 0.4f + 0.15f * static_cast<float>( i ) } );
+    }
+
+    Rhiza::CameraDesc camera;
+    camera.projection = Rhiza::Projection::Orthographic;
+    camera.orthoHeight = 14.0f;
+
+    // Radians; 0 = nose up (+Y).
+    float heading = 0.0f;
+    Rhiza::Vec3 velocity;
+    float time = 0.0f;
 
     while( engine.beginFrame() )
     {
-        // WASD pans the camera, arrows move the unlit cube. Both scale by
-        // deltaSeconds, so speed is the same at any frame rate.
-        constexpr float cameraUnitsPerSecond = 4.0f;
-        const float camStep = cameraUnitsPerSecond * engine.deltaSeconds();
-        if( engine.isKeyDown( Rhiza::Key::W ) )
-        {
-            cameraPosition.z -= camStep;
-            cameraTarget.z -= camStep;
-        }
-        if( engine.isKeyDown( Rhiza::Key::S ) )
-        {
-            cameraPosition.z += camStep;
-            cameraTarget.z += camStep;
-        }
+        const float dt = engine.deltaSeconds();
+        time += dt;
+
+        // A/D turn, W thrusts, Q/E zoom.
+        constexpr float turnRate = 3.5f;
+        constexpr float thrust = 12.0f;
+        constexpr float drag = 1.5f;
         if( engine.isKeyDown( Rhiza::Key::A ) )
-        {
-            cameraPosition.x -= camStep;
-            cameraTarget.x -= camStep;
-        }
+            heading += turnRate * dt;
         if( engine.isKeyDown( Rhiza::Key::D ) )
-        {
-            cameraPosition.x += camStep;
-            cameraTarget.x += camStep;
-        }
-        engine.setCamera( cameraPosition, cameraTarget );
+            heading -= turnRate * dt;
 
-        constexpr float unitsPerSecond = 3.0f;
-        const float step = unitsPerSecond * engine.deltaSeconds();
-        if( Rhiza::Transform *transform = registry.getComponent<Rhiza::Transform>( flatCube ) )
+        const float forwardX = -std::sin( heading );
+        const float forwardY = std::cos( heading );
+        const bool thrusting = engine.isKeyDown( Rhiza::Key::W );
+        if( thrusting )
         {
-            if( engine.isKeyDown( Rhiza::Key::Left ) )
-                transform->position.x -= step;
-            if( engine.isKeyDown( Rhiza::Key::Right ) )
-                transform->position.x += step;
-            if( engine.isKeyDown( Rhiza::Key::Up ) )
-                transform->position.z -= step;
-            if( engine.isKeyDown( Rhiza::Key::Down ) )
-                transform->position.z += step;
+            velocity.x += forwardX * thrust * dt;
+            velocity.y += forwardY * thrust * dt;
+        }
+        velocity.x -= velocity.x * drag * dt;
+        velocity.y -= velocity.y * drag * dt;
+
+        Rhiza::Transform *shipTransform = registry.getComponent<Rhiza::Transform>( ship );
+        shipTransform->position.x += velocity.x * dt;
+        shipTransform->position.y += velocity.y * dt;
+        shipTransform->rotation = Rhiza::Quat::fromAxisAngle( kZAxis, heading );
+
+        Rhiza::Transform *flameTransform = registry.getComponent<Rhiza::Transform>( flame );
+        const float flameLength = thrusting ? 1.4f + 0.2f * std::sin( time * 40.0f ) : 0.5f;
+        const float behind = 0.5f + flameLength * 0.5f;
+        flameTransform->position = { shipTransform->position.x - forwardX * behind,
+                                     shipTransform->position.y - forwardY * behind, 0.9f };
+        flameTransform->rotation = shipTransform->rotation;
+        flameTransform->scale = { 0.8f, flameLength, 1.0f };
+
+        for( auto [entity, spin, transform] : registry.view<Spin, Rhiza::Transform>() )
+        {
+            spin.angle += spin.radiansPerSecond * dt;
+            transform.rotation = Rhiza::Quat::fromAxisAngle( spin.axis, spin.angle );
         }
 
-        // Systems run in the order this loop calls them; the render bridge
-        // goes last so it sees this frame's changes.
+        // Zoom reads real time so it keeps working if gameplay is slowed.
+        const float zoomStep = 1.0f + engine.unscaledDeltaSeconds();
+        if( engine.isKeyDown( Rhiza::Key::Q ) )
+            camera.orthoHeight *= zoomStep;
+        if( engine.isKeyDown( Rhiza::Key::E ) )
+            camera.orthoHeight /= zoomStep;
+        camera.orthoHeight = std::clamp( camera.orthoHeight, 4.0f, 40.0f );
+        camera.position = { shipTransform->position.x, shipTransform->position.y, 10.0f };
+        engine.setCamera( camera );
+
         Rhiza::renderSystem( registry, engine );
 
         engine.endFrame();
     }
 
-    // No save system yet, so a lost device only reports. Once there is one,
-    // this branch saves and relaunches instead of returning.
     if( engine.deviceLost() )
         return 2;
 

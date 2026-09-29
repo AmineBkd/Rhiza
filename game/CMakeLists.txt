@@ -13,3 +13,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     RhizaEngine
     RhizaFramework
 )
+
+# Absolute source path for now; packaging (and Android's APK) will need a
+# relative one.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    EXPANSUM_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+)
