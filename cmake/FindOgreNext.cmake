@@ -137,9 +137,13 @@ if(OgreNext_FOUND AND NOT TARGET OgreNext::OgreNext)
     # MSVC-generator app-local DLL deployment papers over the Windows
     # equivalent of this, which is why the build only breaks here on Linux.
     # Mirror it next to the rest of the triplet's shared libs to fix both.
+    # Linux versions after the suffix (libraw.so.25), macOS before it
+    # (libraw.25.dylib), hence both patterns.
     if(UNIX)
         foreach(_ogrenext_libdir "${OGRENEXT_INSTALL_ROOT}/lib" "${OGRENEXT_INSTALL_ROOT}/debug/lib")
-            file(GLOB _ogrenext_manual_libraw "${_ogrenext_libdir}/manual-link/libraw${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+            file(GLOB _ogrenext_manual_libraw
+                "${_ogrenext_libdir}/manual-link/libraw${CMAKE_SHARED_LIBRARY_SUFFIX}*"
+                "${_ogrenext_libdir}/manual-link/libraw.*${CMAKE_SHARED_LIBRARY_SUFFIX}")
             if(_ogrenext_manual_libraw)
                 file(COPY ${_ogrenext_manual_libraw} DESTINATION "${_ogrenext_libdir}")
             endif()
