@@ -248,6 +248,38 @@ void testPairView()
     check( afterDestroy == 0, "pair view is empty once the only match is destroyed" );
 }
 
+void testAddingTwiceReplaces()
+{
+    std::printf( "adding a component the entity already has replaces it:\n" );
+    Rhiza::Registry registry;
+
+    const Rhiza::Entity e = registry.createEntity();
+    registry.addComponent( e, Position{ 1.0f, 1.0f } );
+    registry.addComponent( e, Position{ 2.0f, 2.0f } );
+
+    const Position *p = registry.getComponent<Position>( e );
+    check( p != nullptr && p->x == 2.0f, "second add overwrites the first" );
+
+    int visited = 0;
+    for( auto [entity, position] : registry.view<Position>() )
+    {
+        ++visited;
+        (void)entity;
+        (void)position;
+    }
+    check( visited == 1, "view visits the entity once, not once per add" );
+
+    registry.removeComponent<Position>( e );
+    int afterRemove = 0;
+    for( auto [entity, position] : registry.view<Position>() )
+    {
+        ++afterRemove;
+        (void)entity;
+        (void)position;
+    }
+    check( afterRemove == 0, "nothing left to visit after removing it" );
+}
+
 }  // namespace
 
 int main()
@@ -259,6 +291,7 @@ int main()
     testDestroyEntityClearsEveryComponentType();
     testView();
     testPairView();
+    testAddingTwiceReplaces();
 
     if( gFailures == 0 )
     {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <tuple>
@@ -36,8 +37,15 @@ template <typename T>
 class ComponentPool : public ComponentPoolBase
 {
 public:
+    // Appending instead would orphan the old copy, still visited by views.
     T &insert( Entity entity, T component )
     {
+        if( T *existing = get( entity ) )
+        {
+            *existing = std::move( component );
+            return *existing;
+        }
+
         if( entity.index >= mSparse.size() )
             mSparse.resize( entity.index + 1, kInvalidDenseIndex );
 
@@ -236,9 +244,11 @@ public:
                mGenerations[entity.index] == entity.generation;
     }
 
+    // Replaces the component if the entity already has one.
     template <typename T>
     T &addComponent( Entity entity, T component )
     {
+        assert( isAlive( entity ) && "addComponent on a dead or invalid entity" );
         return poolFor<T>().insert( entity, std::move( component ) );
     }
 
