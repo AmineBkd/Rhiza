@@ -19,6 +19,14 @@ struct EngineSettings
     // Where loadTexture and loadMesh paths start. Null: the "assets" folder
     // next to the executable.
     const char *assetRoot = nullptr;
+
+    // How many different sounds can play at once - mono for positional
+    // world sounds, stereo for UI. All copies of one sound share its slot.
+    int monoSoundSlots = 56;
+    int stereoSoundSlots = 8;
+
+    // Copies of one sound playing at once, unless loadSound overrides it.
+    int defaultMaxCopies = 4;
 };
 
 }  // namespace Rhiza

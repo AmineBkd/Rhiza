@@ -1,9 +1,9 @@
 project(RhizaEngine VERSION 0.1 LANGUAGES CXX)
 
 # src/ is split by layer, and dependencies point one way: toward core.
-# Nothing in platform/ may include render/, or vice versa - they meet only
-# through core/NativeWindowHandle.h. SDL appears only under platform/, Ogre
-# only under render/.
+# platform/, render/ and audio/ never include one another - they meet only
+# through core/ types or plain callbacks wired up in Engine.cpp. SDL appears
+# only under platform/, Ogre only under render/, miniaudio only under audio/.
 add_library(${PROJECT_NAME} STATIC
     src/Engine.cpp
 
@@ -19,17 +19,25 @@ add_library(${PROJECT_NAME} STATIC
     src/core/Gltf.h
     src/core/NativeWindowHandle.h
 
+    src/audio/Audio.cpp
+    src/audio/MiniaudioImplementation.cpp
+    src/audio/Audio.h
+    src/audio/Miniaudio.h
+
     src/platform/Window.cpp
     src/platform/Input.cpp
     src/platform/FileSystem.cpp
+    src/platform/AudioOutput.cpp
     src/platform/Window.h
     src/platform/Input.h
     src/platform/FileSystem.h
+    src/platform/AudioOutput.h
 
     src/render/Renderer.cpp
     src/render/Renderer.h
 
     include/Rhiza/Engine.h
+    include/Rhiza/Types/Audio.h
     include/Rhiza/Types/Camera.h
     include/Rhiza/Types/EngineSettings.h
     include/Rhiza/Types/Handles.h
@@ -44,7 +52,7 @@ add_library(${PROJECT_NAME} STATIC
 
 target_include_directories(${PROJECT_NAME}
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CGLTF_INCLUDE_DIR}
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CGLTF_INCLUDE_DIR} ${MINIAUDIO_INCLUDE_DIR} ${STB_INCLUDE_DIR}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 OgreNext::OgreNext)

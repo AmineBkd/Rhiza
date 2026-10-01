@@ -1,0 +1,4 @@
+music.ogg
+  Public domain. "josefpres" on freesound.org:
+  https://freesound.org/people/josefpres/sounds/788664/
+  Taken from miniaudio's test data (data/48000-stereo.ogg in its source).

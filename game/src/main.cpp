@@ -91,6 +91,11 @@ int main( int argc, char *argv[] )
     camera.projection = Rhiza::Projection::Orthographic;
     camera.orthoHeight = 14.0f;
 
+    const Rhiza::SoundHandle thrustSound = engine.loadSound( "thrust.wav" );
+    const Rhiza::SoundHandle pingSound = engine.loadSound( "ping.wav" );
+    Rhiza::VoiceHandle thrustVoice;
+    engine.playMusic( "music.ogg", 2.0f );
+
     // Radians; 0 = nose up (+Y).
     float heading = 0.0f;
     Rhiza::Vec3 velocity;
@@ -101,7 +106,7 @@ int main( int argc, char *argv[] )
         const float dt = engine.deltaSeconds();
         time += dt;
 
-        // A/D turn, W thrusts, Q/E zoom.
+        // A/D turn, W thrusts, Space pings, Q/E zoom.
         constexpr float turnRate = 3.5f;
         constexpr float thrust = 12.0f;
         constexpr float drag = 1.5f;
@@ -125,6 +130,31 @@ int main( int argc, char *argv[] )
         shipTransform->position.x += velocity.x * dt;
         shipTransform->position.y += velocity.y * dt;
         shipTransform->rotation = Rhiza::Quat::fromAxisAngle( kZAxis, heading );
+
+        // No velocity for the ship's own sounds: the listener rides along with
+        // it, and Doppler is for things moving relative to the ears.
+        const Rhiza::Vec3 shipPosition = shipTransform->position;
+        if( thrusting && !engine.isVoicePlaying( thrustVoice ) )
+        {
+            Rhiza::PlayDesc rumble;
+            rumble.loop = true;
+            rumble.positional = true;
+            rumble.position = shipPosition;
+            thrustVoice = engine.playSound( thrustSound, rumble );
+        }
+        else if( !thrusting )
+        {
+            engine.stopVoice( thrustVoice );
+        }
+        engine.setVoicePosition( thrustVoice, shipPosition );
+
+        if( engine.wasKeyPressed( Rhiza::Key::Space ) )
+        {
+            Rhiza::PlayDesc ping;
+            ping.positional = true;
+            ping.position = shipPosition;
+            engine.playSound( pingSound, ping );
+        }
 
         Rhiza::Transform *flameTransform = registry.getComponent<Rhiza::Transform>( flame );
         const float flameLength = thrusting ? 1.4f + 0.2f * std::sin( time * 40.0f ) : 0.5f;

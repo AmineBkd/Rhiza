@@ -1,7 +1,13 @@
 #include <Rhiza/Engine.h>
+
+#include <algorithm>
+#include <cmath>
+
+#include "audio/Audio.h"
 #include "core/AssetPath.h"
 #include "core/Clock.h"
 #include "core/Gltf.h"
+#include "platform/AudioOutput.h"
 #include "platform/FileSystem.h"
 #include "platform/Input.h"
 #include "render/Renderer.h"
@@ -15,8 +21,11 @@ namespace Rhiza
         Renderer renderer;
         Input input;
         Clock clock;
+        Audio audio;
+        AudioOutput audioOutput;
         std::string assetRoot;
         bool running = false;
+        bool listenerFollowsCamera = true;
 
         // Loads anyway: the spelling works on this file system, just not on
         // case-sensitive ones.
@@ -27,6 +36,60 @@ namespace Rhiza
                 renderer.reportWarning( "asset '" + cacheKey + "' is spelled '" + spelledOnDisk +
                                         "' on disk. It loads here, but asset paths are "
                                         "case-sensitive, so it will fail on Linux and Android." );
+        }
+
+        bool readAsset( const std::string &cacheKey, std::vector<uint8_t> &bytes )
+        {
+            if( !readFile( joinAssetPath( assetRoot, cacheKey ), bytes ) )
+                return false;
+            warnIfCaseDiffers( cacheKey );
+            return true;
+        }
+
+        SoundHandle loadSound( const char *path, uint32_t maxCopies )
+        {
+            const std::string cacheKey = normalizeAssetPath( path );
+            SoundHandle handle;
+            handle.id = audio.acquireCachedSound( cacheKey );
+            if( handle.isValid() )
+            {
+                if( maxCopies > 0 )
+                    audio.setMaxCopies( handle.id, maxCopies );
+                return handle;
+            }
+
+            std::vector<uint8_t> bytes;
+            if( !readAsset( cacheKey, bytes ) )
+                return handle;
+            std::string error;
+            handle.id = audio.createSound( bytes, cacheKey, maxCopies, error );
+            if( !handle.isValid() )
+                renderer.reportError( "loadSound rejected '" + cacheKey + "' because " + error );
+            return handle;
+        }
+
+        // An orthographic camera's height says nothing about zoom; its view
+        // height does. Half of it puts the ears just above the play plane
+        // (z = 0) at normal zoom, and far enough away to quieten everything
+        // when zoomed far out.
+        static constexpr float kOrthoListenerHeightPerViewHeight = 0.5f;
+
+        void listenFrom( const CameraDesc &camera )
+        {
+            Vec3 position = camera.position;
+            if( camera.projection == Projection::Orthographic )
+                position.z = camera.orthoHeight * kOrthoListenerHeightPerViewHeight;
+            audio.setListener( position, camera.orientation.rotate( { 0.0f, 0.0f, -1.0f } ),
+                               camera.orientation.rotate( { 0.0f, 1.0f, 0.0f } ), {} );
+        }
+
+        void listenFrom( Vec3 position, Vec3 target )
+        {
+            Vec3 forward{ target.x - position.x, target.y - position.y, target.z - position.z };
+            const float length = std::sqrt( forward.x * forward.x + forward.y * forward.y + forward.z * forward.z );
+            if( length > 0.0f )
+                forward = { forward.x / length, forward.y / length, forward.z / length };
+            audio.setListener( position, forward, { 0.0f, 1.0f, 0.0f }, {} );
         }
     };
 
@@ -55,6 +118,24 @@ namespace Rhiza
         }
 
         mImpl->assetRoot = settings.assetRoot ? settings.assetRoot : defaultAssetRoot();
+
+        // A missing or broken sound device leaves the game running silent.
+        const auto toCount = []( int value ) { return static_cast<uint32_t>( std::max( value, 0 ) ); };
+        if( mImpl->audio.initialize( toCount( settings.monoSoundSlots ), toCount( settings.stereoSoundSlots ),
+                                     toCount( settings.defaultMaxCopies ) ) )
+        {
+            Audio *audio = &mImpl->audio;
+            mImpl->audioOutput.start( Audio::kSampleRate, Audio::kChannels,
+                                      [audio]( float *frames, int frameCount ) {
+                                          audio->mix( frames, static_cast<uint32_t>( frameCount ) );
+                                      } );
+            mImpl->listenFrom( settings.cameraPosition, settings.cameraTarget );
+        }
+        else
+        {
+            mImpl->renderer.reportWarning( "audio could not start; the game will run silent" );
+        }
+
         mImpl->running = true;
         return true;
     }
@@ -64,6 +145,9 @@ namespace Rhiza
         if( !mImpl )
             return;
 
+        // Output first: its callback reads from the mixer.
+        mImpl->audioOutput.stop();
+        mImpl->audio.shutdown();
         mImpl->renderer.shutdown();
         mImpl->window.shutdown();
         mImpl.reset();
@@ -244,14 +328,110 @@ namespace Rhiza
 
     void Engine::setCamera( Vec3 position, Vec3 target )
     {
-        if( mImpl )
-            mImpl->renderer.setCamera( position, target );
+        if( !mImpl )
+            return;
+        mImpl->renderer.setCamera( position, target );
+        if( mImpl->listenerFollowsCamera )
+            mImpl->listenFrom( position, target );
     }
 
     void Engine::setCamera( const CameraDesc &camera )
     {
+        if( !mImpl )
+            return;
+        mImpl->renderer.setCamera( camera );
+        if( mImpl->listenerFollowsCamera )
+            mImpl->listenFrom( camera );
+    }
+
+    SoundHandle Engine::loadSound( const char *path )
+    {
+        return mImpl ? mImpl->loadSound( path, 0 ) : SoundHandle{};
+    }
+
+    SoundHandle Engine::loadSound( const char *path, int maxCopies )
+    {
+        return mImpl ? mImpl->loadSound( path, static_cast<uint32_t>( std::max( maxCopies, 1 ) ) ) : SoundHandle{};
+    }
+
+    void Engine::destroySound( SoundHandle sound )
+    {
+        if( mImpl && sound.isValid() )
+            mImpl->audio.destroySound( sound.id );
+    }
+
+    VoiceHandle Engine::playSound( SoundHandle sound, const PlayDesc &desc )
+    {
+        VoiceHandle handle;
+        if( mImpl && sound.isValid() )
+        {
+            const Audio::VoiceId voice = mImpl->audio.play( sound.id, desc );
+            handle = VoiceHandle{ voice.id, voice.generation };
+        }
+        return handle;
+    }
+
+    void Engine::stopVoice( VoiceHandle voice )
+    {
+        if( mImpl && voice.isValid() )
+            mImpl->audio.stop( { voice.id, voice.generation } );
+    }
+
+    void Engine::setVoicePosition( VoiceHandle voice, Vec3 position, Vec3 velocity )
+    {
+        if( mImpl && voice.isValid() )
+            mImpl->audio.setVoicePosition( { voice.id, voice.generation }, position, velocity );
+    }
+
+    bool Engine::isVoicePlaying( VoiceHandle voice ) const
+    {
+        return mImpl && voice.isValid() && mImpl->audio.isPlaying( { voice.id, voice.generation } );
+    }
+
+    void Engine::playMusic( const char *path, float fadeSeconds )
+    {
+        if( !mImpl )
+            return;
+        const std::string cacheKey = normalizeAssetPath( path );
+        std::vector<uint8_t> bytes;
+        if( !mImpl->readAsset( cacheKey, bytes ) )
+            return;
+        std::string error;
+        if( !mImpl->audio.playMusic( std::move( bytes ), fadeSeconds, error ) )
+            mImpl->renderer.reportError( "playMusic rejected '" + cacheKey + "' because " + error );
+    }
+
+    void Engine::stopMusic( float fadeSeconds )
+    {
         if( mImpl )
-            mImpl->renderer.setCamera( camera );
+            mImpl->audio.stopMusic( fadeSeconds );
+    }
+
+    void Engine::setBusVolume( AudioBus bus, float volume )
+    {
+        if( mImpl )
+            mImpl->audio.setBusVolume( bus, volume );
+    }
+
+    void Engine::setBusPaused( AudioBus bus, bool paused )
+    {
+        if( mImpl )
+            mImpl->audio.setBusPaused( bus, paused );
+    }
+
+    void Engine::setListener( const ListenerDesc &listener )
+    {
+        if( !mImpl )
+            return;
+        mImpl->listenerFollowsCamera = false;
+        mImpl->audio.setListener( listener.position, listener.orientation.rotate( { 0.0f, 0.0f, -1.0f } ),
+                                  listener.orientation.rotate( { 0.0f, 1.0f, 0.0f } ), listener.velocity );
+    }
+
+    void Engine::followCameraWithListener()
+    {
+        if( mImpl )
+            mImpl->listenerFollowsCamera = true;
     }
 
     bool Engine::isKeyDown( Key key ) const

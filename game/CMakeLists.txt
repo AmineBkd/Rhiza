@@ -1,4 +1,4 @@
-project(Expansum VERSION 0.1 LANGUAGES CXX)
+project(Game VERSION 0.1 LANGUAGES CXX)
 
 # Create game executable
 add_executable(${PROJECT_NAME}
@@ -25,7 +25,7 @@ if(_isMultiConfig)
 else()
     set(_exeDir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 endif()
-add_custom_target(ExpansumAssets
+add_custom_target(GameAssets
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/assets ${_exeDir}/assets
 )
-add_dependencies(${PROJECT_NAME} ExpansumAssets)
+add_dependencies(${PROJECT_NAME} GameAssets)

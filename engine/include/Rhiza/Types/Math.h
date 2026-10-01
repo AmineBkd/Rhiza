@@ -26,6 +26,8 @@ struct Quat
 
     // `axis` must be unit length.
     static Quat fromAxisAngle( Vec3 axis, float radians );
+
+    Vec3 rotate( Vec3 v ) const;
 };
 
 struct Color

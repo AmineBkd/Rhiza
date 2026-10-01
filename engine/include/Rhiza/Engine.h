@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <Rhiza/Types/Audio.h>
 #include <Rhiza/Types/Camera.h>
 #include <Rhiza/Types/EngineSettings.h>
 #include <Rhiza/Types/Handles.h>
@@ -111,6 +112,37 @@ public:
     // Look-at; leaves the projection as it was.
     void setCamera(Vec3 position, Vec3 target);
     void setCamera(const CameraDesc &camera);
+
+    // Sounds load like meshes and textures: cached by path, one destroy per
+    // load. Mono sounds are for the world, stereo for UI. Up to
+    // EngineSettings::defaultMaxCopies copies of one sound play at once.
+    SoundHandle loadSound(const char *path);
+
+    // Overrides how many copies may play at once - 1 for a UI click that
+    // should never overlap itself. The cap belongs to the sound, so the last
+    // value given wins.
+    SoundHandle loadSound(const char *path, int maxCopies);
+    void destroySound(SoundHandle sound);
+
+    // At the sound's copy cap this restarts its oldest copy; when every slot
+    // holds a different sound, the oldest slot is taken over.
+    VoiceHandle playSound(SoundHandle sound, const PlayDesc &desc = {});
+    void stopVoice(VoiceHandle voice);
+    void setVoicePosition(VoiceHandle voice, Vec3 position, Vec3 velocity = {});
+    bool isVoicePlaying(VoiceHandle voice) const;
+
+    // Ogg Vorbis, kept compressed and decoded while playing. Loops, and a new
+    // track crossfades from the previous one over `fadeSeconds`.
+    void playMusic(const char *path, float fadeSeconds = 0.0f);
+    void stopMusic(float fadeSeconds = 0.0f);
+
+    void setBusVolume(AudioBus bus, float volume);
+    void setBusPaused(AudioBus bus, bool paused);
+
+    // The listener follows the camera until this is called, and again after
+    // followCameraWithListener().
+    void setListener(const ListenerDesc &listener);
+    void followCameraWithListener();
 
     // Keys are identified by physical position - see Key in Types.h.
     // wasKeyPressed/Released are true only on the frame of the transition;

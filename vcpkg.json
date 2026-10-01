@@ -4,6 +4,8 @@
   "dependencies": [
     "sdl3",
     "ogre-next",
-    "cgltf"
+    "cgltf",
+    "miniaudio",
+    "stb"
   ]
 }

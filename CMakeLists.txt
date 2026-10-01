@@ -14,6 +14,8 @@ find_package(OgreNext REQUIRED)
 
 # Header-only, and vcpkg ships no CMake package for it.
 find_path(CGLTF_INCLUDE_DIR cgltf.h REQUIRED)
+find_path(MINIAUDIO_INCLUDE_DIR miniaudio.h REQUIRED)
+find_path(STB_INCLUDE_DIR stb_vorbis.c REQUIRED)
 
 enable_testing()
 

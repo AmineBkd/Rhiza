@@ -54,3 +54,28 @@ target_include_directories(AssetTests PRIVATE
 )
 
 add_test(NAME AssetTests COMMAND AssetTests)
+
+# The mixer runs with no sound card, so this drives the same path SDL pulls
+# from in the game. The Ogg file is the game's music, used as real-world
+# Vorbis input.
+add_executable(AudioTests AudioTests.cpp
+    ${CMAKE_SOURCE_DIR}/engine/src/audio/Audio.cpp
+    ${CMAKE_SOURCE_DIR}/engine/src/audio/MiniaudioImplementation.cpp
+    ${CMAKE_SOURCE_DIR}/engine/src/core/AssetCache.cpp
+)
+target_include_directories(AudioTests PRIVATE
+    ${CMAKE_SOURCE_DIR}/engine/include
+    ${CMAKE_SOURCE_DIR}/engine/src
+    ${MINIAUDIO_INCLUDE_DIR}
+    ${STB_INCLUDE_DIR}
+)
+target_compile_definitions(AudioTests PRIVATE
+    RHIZA_TEST_OGG="${CMAKE_SOURCE_DIR}/game/assets/music.ogg"
+)
+
+add_test(NAME AudioTests COMMAND AudioTests)
+
+add_executable(MathTests MathTests.cpp ${CMAKE_SOURCE_DIR}/engine/src/core/Math.cpp)
+target_include_directories(MathTests PRIVATE ${CMAKE_SOURCE_DIR}/engine/include)
+
+add_test(NAME MathTests COMMAND MathTests)
