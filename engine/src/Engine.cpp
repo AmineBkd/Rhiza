@@ -121,18 +121,23 @@ namespace Rhiza
 
         // A missing or broken sound device leaves the game running silent.
         const auto toCount = []( int value ) { return static_cast<uint32_t>( std::max( value, 0 ) ); };
-        if( mImpl->audio.initialize( toCount( settings.monoSoundSlots ), toCount( settings.stereoSoundSlots ),
-                                     toCount( settings.defaultMaxCopies ) ) )
-        {
-            Audio *audio = &mImpl->audio;
+        Audio *audio = &mImpl->audio;
+        const bool audioStarted =
+            audio->initialize( toCount( settings.monoSoundSlots ), toCount( settings.stereoSoundSlots ),
+                               toCount( settings.defaultMaxCopies ) ) &&
             mImpl->audioOutput.start( Audio::kSampleRate, Audio::kChannels,
                                       [audio]( float *frames, int frameCount ) {
                                           audio->mix( frames, static_cast<uint32_t>( frameCount ) );
                                       } );
+        if( audioStarted )
+        {
             mImpl->listenFrom( settings.cameraPosition, settings.cameraTarget );
         }
         else
         {
+            // With no device pulling the mix, voices would never finish and
+            // fill every slot.
+            audio->shutdown();
             mImpl->renderer.reportWarning( "audio could not start; the game will run silent" );
         }
 
