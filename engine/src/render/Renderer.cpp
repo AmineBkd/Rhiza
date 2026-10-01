@@ -535,7 +535,7 @@ void Renderer::shutdown()
 
 void Renderer::renderOneFrame()
 {
-    if( mDeviceLost )
+    if( mDeviceLost || mRenderFailed )
         return;
 
     try
@@ -547,11 +547,12 @@ void Renderer::renderOneFrame()
     }
     catch( Ogre::Exception &e )
     {
-        // The frame is left half-drawn. Vulkan's device loss also arrives as
-        // a throw, with VK_ERROR_DEVICE_LOST in getNumber().
-        logError( "rendering failed, stopping as if the device were lost: " + e.getDescription() );
-        mDeviceLost = true;
-        return;
+        // The frame is left half-drawn and Ogre can't say which material
+        // broke it. Vulkan's device loss also arrives here, with
+        // VK_ERROR_DEVICE_LOST in getNumber() - route it once Vulkan is wired.
+        logError( "rendering failed: " + e.getDescription() );
+        if( !mDeviceLost )
+            mRenderFailed = true;
     }
 
     if( mDeviceLost )

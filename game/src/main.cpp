@@ -187,6 +187,8 @@ int main( int argc, char *argv[] )
 
     if( engine.deviceLost() )
         return 2;
+    if( engine.renderFailed() )
+        return 3;
 
     return 0;
 }

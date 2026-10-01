@@ -57,6 +57,10 @@ public:
     // that point; there is no in-process recovery by design.
     bool isDeviceLost() const { return mDeviceLost; }
 
+    // True once a frame threw for any other reason, such as a shader that
+    // failed to compile. Rendering stops too: the same draw would throw again.
+    bool hasRenderFailed() const { return mRenderFailed; }
+
     // 0 if the description is unusable or the GPU buffers could not be
     // allocated; the reason goes to the log. Same for createInstance below.
     // An empty `cacheKey` makes a unique mesh that acquireCachedMesh never
@@ -167,6 +171,7 @@ private:
     Ogre::Window *mRenderWindow = nullptr;
     Ogre::CompositorWorkspace *mWorkspace = nullptr;
     bool mDeviceLost = false;
+    bool mRenderFailed = false;
     std::unique_ptr<DeviceLossListener> mDeviceLossListener;
 
     // One counter shared across every map below, so a handle value is never

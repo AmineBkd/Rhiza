@@ -46,6 +46,11 @@ public:
     // recover in place: save and restart the process.
     bool deviceLost() const;
 
+    // True once rendering has failed for any other reason, such as a shader
+    // that would not compile. beginFrame() returns false from then on too,
+    // but a restart would hit the same error: exit and report it instead.
+    bool renderFailed() const;
+
     // Renders the frame. Call once per successful beginFrame(), after game
     // code has finished mutating the scene - anything changed after this
     // lands on screen a frame late.
