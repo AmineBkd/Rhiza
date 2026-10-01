@@ -39,15 +39,18 @@ target_link_libraries(RegistryTests PRIVATE RhizaFramework)
 
 add_test(NAME RegistryTests COMMAND RegistryTests)
 
-# Path keys and the asset cache's bookkeeping are pure data too, so they
-# compile straight in like Input and Clock above.
+# Path keys, the asset cache's bookkeeping and glTF parsing are pure data
+# too. cgltf is header-only, so the parser compiles straight in like Input
+# and Clock above.
 add_executable(AssetTests AssetTests.cpp
     ${CMAKE_SOURCE_DIR}/engine/src/core/AssetPath.cpp
     ${CMAKE_SOURCE_DIR}/engine/src/core/AssetCache.cpp
+    ${CMAKE_SOURCE_DIR}/engine/src/core/Gltf.cpp
 )
 target_include_directories(AssetTests PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/include
     ${CMAKE_SOURCE_DIR}/engine/src
+    ${CGLTF_INCLUDE_DIR}
 )
 
 add_test(NAME AssetTests COMMAND AssetTests)

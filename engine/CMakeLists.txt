@@ -12,9 +12,11 @@ add_library(${PROJECT_NAME} STATIC
     src/core/Math.cpp
     src/core/AssetPath.cpp
     src/core/AssetCache.cpp
+    src/core/Gltf.cpp
     src/core/Clock.h
     src/core/AssetPath.h
     src/core/AssetCache.h
+    src/core/Gltf.h
     src/core/NativeWindowHandle.h
 
     src/platform/Window.cpp
@@ -42,7 +44,7 @@ add_library(${PROJECT_NAME} STATIC
 
 target_include_directories(${PROJECT_NAME}
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CGLTF_INCLUDE_DIR}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 OgreNext::OgreNext)

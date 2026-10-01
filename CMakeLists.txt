@@ -12,6 +12,9 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(OgreNext REQUIRED)
 
+# Header-only, and vcpkg ships no CMake package for it.
+find_path(CGLTF_INCLUDE_DIR cgltf.h REQUIRED)
+
 enable_testing()
 
 add_subdirectory(engine)

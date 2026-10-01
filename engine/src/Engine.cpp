@@ -1,6 +1,7 @@
 #include <Rhiza/Engine.h>
 #include "core/AssetPath.h"
 #include "core/Clock.h"
+#include "core/Gltf.h"
 #include "platform/FileSystem.h"
 #include "platform/Input.h"
 #include "render/Renderer.h"
@@ -113,6 +114,34 @@ namespace Rhiza
     {
         if( mImpl && mesh.isValid() )
             mImpl->renderer.destroyMeshAsset( mesh.id );
+    }
+
+    MeshHandle Engine::loadMesh( const char *path )
+    {
+        MeshHandle handle;
+        if( !mImpl )
+            return handle;
+
+        const std::string cacheKey = normalizeAssetPath( path );
+        handle.id = mImpl->renderer.acquireCachedMesh( cacheKey );
+        if( handle.isValid() )
+            return handle;
+
+        const std::string fullPath = joinAssetPath( mImpl->assetRoot, cacheKey );
+        std::vector<uint8_t> bytes;
+        if( !readFile( fullPath, bytes ) )
+            return handle;
+
+        MeshDesc desc;
+        std::string error;
+        if( !parseGltfMesh( bytes, fullPath, readFile, desc, error ) )
+        {
+            mImpl->renderer.reportError( "loadMesh rejected '" + cacheKey + "' because " + error );
+            return handle;
+        }
+
+        handle.id = mImpl->renderer.createMeshAsset( desc, cacheKey );
+        return handle;
     }
 
     TextureHandle Engine::loadTexture( const char *path, const TextureDesc &desc )

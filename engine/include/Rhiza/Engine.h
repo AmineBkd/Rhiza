@@ -69,6 +69,10 @@ public:
     // path returns the same handle without loading again. Every load needs
     // its own destroy; the last one frees the asset.
 
+    // glTF (.gltf or .glb), static geometry only. Never mutable: updateMesh
+    // on a shared mesh would change it for every user.
+    MeshHandle loadMesh(const char *path);
+
     // Refused while any instance still references it.
     void destroyMeshAsset(MeshHandle mesh);
 

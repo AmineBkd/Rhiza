@@ -70,7 +70,7 @@ int main( int argc, char *argv[] )
     const Rhiza::Entity flame = spawn( quad, engine.createMaterial( flameMaterial ), {} );
 
     // Lit 3D objects in the 2D scene.
-    const Rhiza::MeshHandle cube = engine.createMeshAsset( Rhiza::Shapes::cube() );
+    const Rhiza::MeshHandle rockMesh = engine.loadMesh( "rock.glb" );
     Rhiza::MaterialDesc rockDesc;
     rockDesc.color = { 0.45f, 0.4f, 0.38f, 1.0f };
     rockDesc.roughness = 0.9f;
@@ -82,7 +82,7 @@ int main( int argc, char *argv[] )
         const float around = static_cast<float>( i ) * 0.785f;
         const float size = 0.8f + 0.1f * static_cast<float>( i );
         const Rhiza::Entity rock =
-            spawn( cube, rockMaterial,
+            spawn( rockMesh, rockMaterial,
                    { { std::cos( around ) * 7.0f, std::sin( around ) * 7.0f, 0.0f }, {}, { size, size, size } } );
         registry.addComponent( rock, Spin{ spinAxes[i % 3], 0.4f + 0.15f * static_cast<float>( i ) } );
     }
