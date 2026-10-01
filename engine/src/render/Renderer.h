@@ -118,6 +118,10 @@ private:
         uint32_t instanceRefCount = 0;
     };
 
+    // Logs why and returns null if `handle` can't take `desc`.
+    const MeshAsset *findUpdatableMesh( uint32_t handle, const MeshDesc &desc ) const;
+    void reinitialiseInstancesOf( uint32_t meshHandle );
+
     struct MaterialAsset
     {
         Ogre::HlmsDatablock *datablock = nullptr;

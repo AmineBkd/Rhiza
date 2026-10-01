@@ -158,7 +158,7 @@ private:
 // Empty string if the description is usable, otherwise why it isn't.
 // Checking up front turns a caller mistake into a log line rather than an
 // Ogre assertion or an out-of-range index reading garbage on the GPU.
-std::string describeProblem( const MeshDesc &desc )
+std::string findMeshProblem( const MeshDesc &desc )
 {
     if( desc.vertices.empty() )
         return "it has no vertices";
@@ -257,6 +257,48 @@ void destroyVao( Ogre::VertexArrayObject *vao, Ogre::VaoManager *vaoManager )
         vaoManager->destroyIndexBuffer( indexBuffer );
     for( Ogre::VertexBufferPacked *vertexBuffer : vertexBuffers )
         vaoManager->destroyVertexBuffer( vertexBuffer );
+}
+
+Ogre::Aabb boundsOf( const MeshDesc &desc )
+{
+    Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
+    for( const Vertex &v : desc.vertices )
+        bounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
+    return bounds;
+}
+
+void setBounds( Ogre::Mesh &mesh, const Ogre::Aabb &bounds )
+{
+    mesh._setBounds( bounds, false );
+    mesh._setBoundingSphereRadius( bounds.getRadius() );
+}
+
+bool topologyUnchanged( const Ogre::VertexArrayObject *vao, const MeshDesc &desc )
+{
+    const Ogre::VertexBufferPackedVec &vertexBuffers = vao->getVertexBuffers();
+    return vertexBuffers.size() == 1 && vertexBuffers[0]->getNumElements() == desc.vertices.size() &&
+           vao->getIndexBuffer() != nullptr &&
+           vao->getIndexBuffer()->getNumElements() == desc.indices.size();
+}
+
+void reuploadGeometry( Ogre::VertexArrayObject *vao, const MeshDesc &desc )
+{
+    std::vector<GpuVertex> vertexData( desc.vertices.size() );
+    for( size_t i = 0; i < desc.vertices.size(); ++i )
+        vertexData[i] = toGpuVertex( desc.vertices[i] );
+    vao->getVertexBuffers()[0]->upload( vertexData.data(), 0, vertexData.size() );
+    vao->getIndexBuffer()->upload( desc.indices.data(), 0, desc.indices.size() );
+}
+
+// Throws Ogre::Exception on allocation failure, leaving the old geometry in
+// place.
+void replaceGeometry( Ogre::SubMesh &subMesh, const MeshDesc &desc, Ogre::VaoManager *vaoManager )
+{
+    Ogre::Aabb unusedBounds;
+    Ogre::VertexArrayObject *newVao = buildVao( desc, vaoManager, Ogre::BT_DEFAULT, unusedBounds );
+    destroyVao( subMesh.mVao[Ogre::VpNormal][0], vaoManager );
+    subMesh.mVao[Ogre::VpNormal][0] = newVao;
+    subMesh.mVao[Ogre::VpShadow][0] = newVao;
 }
 
 // Ogre's log is the one place these messages are useful, but it only exists
@@ -479,7 +521,7 @@ void Renderer::renderOneFrame()
 
 uint32_t Renderer::createMeshAsset( const MeshDesc &desc )
 {
-    const std::string problem = describeProblem( desc );
+    const std::string problem = findMeshProblem( desc );
     if( !problem.empty() )
     {
         logError( "createMeshAsset rejected a mesh because " + problem );
@@ -509,9 +551,7 @@ uint32_t Renderer::createMeshAsset( const MeshDesc &desc )
     Ogre::SubMesh *subMesh = mesh->createSubMesh();
     subMesh->mVao[Ogre::VpNormal].push_back( vao );
     subMesh->mVao[Ogre::VpShadow].push_back( vao );
-
-    mesh->_setBounds( bounds, false );
-    mesh->_setBoundingSphereRadius( bounds.getRadius() );
+    setBounds( *mesh, bounds );
 
     MeshAsset asset;
     asset.name = meshName;
@@ -523,88 +563,73 @@ uint32_t Renderer::createMeshAsset( const MeshDesc &desc )
 
 void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
 {
+    const MeshAsset *asset = findUpdatableMesh( handle, desc );
+    if( !asset )
+        return;
+
+    Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().getByName(
+        asset->name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
+    Ogre::SubMesh *subMesh = mesh->getSubMesh( 0 );
+    Ogre::VertexArrayObject *vao = subMesh->mVao[Ogre::VpNormal][0];
+
+    if( topologyUnchanged( vao, desc ) )
+    {
+        reuploadGeometry( vao, desc );
+    }
+    else
+    {
+        try
+        {
+            replaceGeometry( *subMesh, desc, mRoot->getRenderSystem()->getVaoManager() );
+        }
+        catch( Ogre::Exception &e )
+        {
+            logError( "updateMesh could not allocate GPU buffers for '" + asset->name +
+                      "': " + e.getDescription() );
+            return;
+        }
+    }
+
+    setBounds( *mesh, boundsOf( desc ) );
+    reinitialiseInstancesOf( handle );
+}
+
+const Renderer::MeshAsset *Renderer::findUpdatableMesh( uint32_t handle, const MeshDesc &desc ) const
+{
     auto it = mMeshAssets.find( handle );
     if( it == mMeshAssets.end() )
     {
         logError( "updateMesh given a mesh handle that does not exist" );
-        return;
+        return nullptr;
     }
 
-    MeshAsset &asset = it->second;
+    const MeshAsset &asset = it->second;
     if( !asset.isMutable )
     {
         logError( "updateMesh called on '" + asset.name +
                   "', which was not created with MeshDesc::isMutable" );
-        return;
+        return nullptr;
     }
 
-    const std::string problem = describeProblem( desc );
+    const std::string problem = findMeshProblem( desc );
     if( !problem.empty() )
     {
         logError( "updateMesh rejected new geometry for '" + asset.name + "' because " + problem );
-        return;
+        return nullptr;
     }
 
-    Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().getByName(
-        asset.name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
-    Ogre::SubMesh *subMesh = mesh->getSubMesh( 0 );
-    Ogre::VertexArrayObject *oldVao = subMesh->mVao[Ogre::VpNormal][0];
-    Ogre::VaoManager *vaoManager = mRoot->getRenderSystem()->getVaoManager();
+    return &asset;
+}
 
-    // Same counts as before: a plain re-upload into the existing buffers,
-    // no GPU allocation. The common path for deformation without topology
-    // change.
-    const Ogre::VertexBufferPackedVec &vertexBuffers = oldVao->getVertexBuffers();
-    const bool sameSize = vertexBuffers.size() == 1 &&
-                          vertexBuffers[0]->getNumElements() == desc.vertices.size() &&
-                          oldVao->getIndexBuffer() != nullptr &&
-                          oldVao->getIndexBuffer()->getNumElements() == desc.indices.size();
-
-    if( sameSize )
-    {
-        std::vector<GpuVertex> vertexData( desc.vertices.size() );
-        for( size_t i = 0; i < desc.vertices.size(); ++i )
-            vertexData[i] = toGpuVertex( desc.vertices[i] );
-        vertexBuffers[0]->upload( vertexData.data(), 0, vertexData.size() );
-        oldVao->getIndexBuffer()->upload( desc.indices.data(), 0, desc.indices.size() );
-
-        Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
-        for( const Vertex &v : desc.vertices )
-            bounds.merge( Ogre::Vector3( v.position.x, v.position.y, v.position.z ) );
-        mesh->_setBounds( bounds, false );
-        mesh->_setBoundingSphereRadius( bounds.getRadius() );
-    }
-    else
-    {
-        // Topology changed, so the buffers are the wrong size and there is
-        // no partial-upload path - replace them outright.
-        Ogre::Aabb bounds = Ogre::Aabb::BOX_NULL;
-        Ogre::VertexArrayObject *newVao = nullptr;
-        try
-        {
-            newVao = buildVao( desc, vaoManager, Ogre::BT_DEFAULT, bounds );
-        }
-        catch( Ogre::Exception &e )
-        {
-            logError( "updateMesh could not allocate GPU buffers for '" + asset.name +
-                      "': " + e.getDescription() );
-            return;
-        }
-
-        destroyVao( oldVao, vaoManager );
-        subMesh->mVao[Ogre::VpNormal][0] = newVao;
-        subMesh->mVao[Ogre::VpShadow][0] = newVao;
-        mesh->_setBounds( bounds, false );
-        mesh->_setBoundingSphereRadius( bounds.getRadius() );
-    }
-
+void Renderer::reinitialiseInstancesOf( uint32_t meshHandle )
+{
     // Every Item cached its own Vao at creation and has no idea it just
     // changed. _initialise(true) forces the rebuild - "useful if you changed
     // the content of a Mesh or Skeleton at runtime".
     // https://ogrecave.github.io/ogre-next/api/latest/class_ogre_1_1_item.html
     for( auto &instanceEntry : mInstances )
     {
-        if( instanceEntry.second.meshAssetHandle == handle )
+        if( instanceEntry.second.meshAssetHandle == meshHandle )
             instanceEntry.second.item->_initialise( true );
     }
 }
