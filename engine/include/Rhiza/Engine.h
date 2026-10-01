@@ -139,6 +139,9 @@ public:
     void setBusVolume(AudioBus bus, float volume);
     void setBusPaused(AudioBus bus, bool paused);
 
+    // Scales every bus, music included, on top of their own volumes.
+    void setMasterVolume(float volume);
+
     // The listener follows the camera until this is called, and again after
     // followCameraWithListener().
     void setListener(const ListenerDesc &listener);

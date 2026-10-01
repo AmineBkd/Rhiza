@@ -9,6 +9,8 @@ enum class AudioBus
 {
     Sfx,
     Music,
+    // Keeps playing when Sfx is paused - menu clicks over a paused game.
+    Ui,
 };
 
 struct PlayDesc
@@ -22,6 +24,8 @@ struct PlayDesc
     float pan = 0.0f;
 
     bool loop = false;
+
+    AudioBus bus = AudioBus::Sfx;
 
     // Heard from `position` relative to the listener: panned by direction,
     // quieter with distance. Meant for mono sounds - a stereo recording

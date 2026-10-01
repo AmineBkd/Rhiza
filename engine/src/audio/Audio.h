@@ -66,6 +66,7 @@ public:
 
     void setBusVolume( AudioBus bus, float volume );
     void setBusPaused( AudioBus bus, bool paused );
+    void setMasterVolume( float volume );
 
     void setListener( Vec3 position, Vec3 forward, Vec3 up, Vec3 velocity );
 

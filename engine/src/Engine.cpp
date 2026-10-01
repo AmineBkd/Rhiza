@@ -419,6 +419,12 @@ namespace Rhiza
             mImpl->audio.setBusPaused( bus, paused );
     }
 
+    void Engine::setMasterVolume( float volume )
+    {
+        if( mImpl )
+            mImpl->audio.setMasterVolume( volume );
+    }
+
     void Engine::setListener( const ListenerDesc &listener )
     {
         if( !mImpl )

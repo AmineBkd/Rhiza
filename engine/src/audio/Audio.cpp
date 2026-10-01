@@ -15,6 +15,7 @@ namespace
 {
 
 constexpr uint64_t kDecodeChunkFrames = 4096;
+constexpr size_t kBusCount = 3;  // one per AudioBus
 
 ma_uint64 toMilliseconds( float seconds )
 {
@@ -44,6 +45,7 @@ struct Audio::Impl
         uint32_t generation = 0;
         uint32_t soundHandle = 0;  // 0 while free
         uint64_t startedAt = 0;
+        AudioBus bus = AudioBus::Sfx;
     };
 
     struct Pool
@@ -64,7 +66,8 @@ struct Audio::Impl
     };
 
     ma_engine engine;
-    ma_sound_group buses[2];  // indexed by AudioBus
+    ma_sound_group buses[kBusCount];  // indexed by AudioBus
+    size_t readyBuses = 0;
     bool initialised = false;
 
     // Created once and never resized: miniaudio holds pointers into them.
@@ -85,7 +88,7 @@ struct Audio::Impl
     std::mutex mutex;
 
     Pool &poolFor( const Sound &sound ) { return pools[sound.channels == 1 ? 0 : 1]; }
-    ma_sound_group &bus( AudioBus which ) { return buses[which == AudioBus::Music ? 1 : 0]; }
+    ma_sound_group &bus( AudioBus which ) { return buses[static_cast<size_t>( which )]; }
 
     Voice *findVoice( VoiceId id )
     {
@@ -202,8 +205,8 @@ struct Audio::Impl
         readyVoices = 0;
         voices.reset();
         voiceCount = 0;
-        ma_sound_group_uninit( &buses[1] );
-        ma_sound_group_uninit( &buses[0] );
+        while( readyBuses > 0 )
+            ma_sound_group_uninit( &buses[--readyBuses] );
         ma_engine_uninit( &engine );
         sounds.clear();
         soundCache.clear();
@@ -232,18 +235,17 @@ bool Audio::initialize( uint32_t monoSlots, uint32_t stereoSlots, uint32_t defau
     config.listenerCount = 1;
     if( ma_engine_init( &config, &a.engine ) != MA_SUCCESS )
         return false;
-    if( ma_sound_group_init( &a.engine, 0, nullptr, &a.buses[0] ) != MA_SUCCESS )
-    {
-        ma_engine_uninit( &a.engine );
-        return false;
-    }
-    if( ma_sound_group_init( &a.engine, 0, nullptr, &a.buses[1] ) != MA_SUCCESS )
-    {
-        ma_sound_group_uninit( &a.buses[0] );
-        ma_engine_uninit( &a.engine );
-        return false;
-    }
     a.initialised = true;
+
+    for( ma_sound_group &bus : a.buses )
+    {
+        if( ma_sound_group_init( &a.engine, 0, nullptr, &bus ) != MA_SUCCESS )
+        {
+            a.uninitialiseAll();
+            return false;
+        }
+        ++a.readyBuses;
+    }
 
     a.defaultMaxCopies = std::max( defaultMaxCopies, 1u );
     a.pools[0] = { 0, monoSlots * a.defaultMaxCopies, monoSlots, 1, 0 };
@@ -259,8 +261,8 @@ bool Audio::initialize( uint32_t monoSlots, uint32_t stereoSlots, uint32_t defau
         // miniaudio 0.11 leaves a buffer's rate at 0 ("TODO: 0.12"); say it
         // outright rather than depend on how 0 is read.
         voice.source.sampleRate = kSampleRate;
-        if( ma_sound_init_from_data_source( &a.engine, &voice.source, 0, &a.buses[0], &voice.sound ) !=
-            MA_SUCCESS )
+        if( ma_sound_init_from_data_source( &a.engine, &voice.source, 0, &a.bus( AudioBus::Sfx ),
+                                            &voice.sound ) != MA_SUCCESS )
         {
             ma_audio_buffer_ref_uninit( &voice.source );
             a.uninitialiseAll();
@@ -399,6 +401,12 @@ Audio::VoiceId Audio::play( uint32_t soundHandle, const PlayDesc &desc )
     }
 
     ma_sound &s = voice->sound;
+    if( voice->bus != desc.bus )
+    {
+        // Detaches it from the old bus too.
+        ma_node_attach_output_bus( &s, 0, &a.bus( desc.bus ), 0 );
+        voice->bus = desc.bus;
+    }
     ma_audio_buffer_ref_set_data( &voice->source, sound.samples.data(), sound.frames );
     ma_sound_reset_stop_time_and_fade( &s );
     ma_sound_seek_to_pcm_frame( &s, 0 );
@@ -489,7 +497,7 @@ bool Audio::playMusic( std::vector<uint8_t> encoded, float fadeInSeconds, std::s
         return false;
     }
     if( ma_sound_init_from_data_source( &a.engine, &next.decoder, MA_SOUND_FLAG_NO_SPATIALIZATION,
-                                        &a.buses[1], &next.sound ) != MA_SUCCESS )
+                                        &a.bus( AudioBus::Music ), &next.sound ) != MA_SUCCESS )
     {
         ma_decoder_uninit( &next.decoder );
         next.encoded.clear();
@@ -546,6 +554,13 @@ void Audio::setBusPaused( AudioBus bus, bool paused )
         ma_sound_group_stop( &mImpl->bus( bus ) );
     else
         ma_sound_group_start( &mImpl->bus( bus ) );
+}
+
+void Audio::setMasterVolume( float volume )
+{
+    std::lock_guard<std::mutex> lock( mImpl->mutex );
+    if( mImpl->initialised )
+        ma_engine_set_volume( &mImpl->engine, volume );
 }
 
 void Audio::setListener( Vec3 position, Vec3 forward, Vec3 up, Vec3 velocity )

@@ -224,6 +224,58 @@ void testBuses()
     check( !silent( listen( audio ) ), "and resume" );
 }
 
+void testUiBus()
+{
+    std::printf( "UI bus survives a paused game:\n" );
+    Rhiza::Audio audio;
+    audio.initialize( 4, 2, 4 );
+    const uint32_t world = makeSound( audio, 1, 0.5f, "world.wav" );
+    const uint32_t click = makeSound( audio, 1, 0.5f, "click.wav" );
+
+    // The click reuses the voice the world sound just left, so this also
+    // checks that a voice moves to its new bus.
+    const Rhiza::Audio::VoiceId worldVoice = audio.play( world, looping() );
+    audio.stop( worldVoice );
+    Rhiza::PlayDesc ui = looping();
+    ui.bus = Rhiza::AudioBus::Ui;
+    audio.play( click, ui );
+
+    audio.setBusPaused( Rhiza::AudioBus::Sfx, true );
+    check( !silent( listen( audio ) ), "pausing Sfx leaves UI sounds playing" );
+    audio.setBusVolume( Rhiza::AudioBus::Ui, 0.0f );
+    check( silent( listen( audio ) ), "the UI bus has its own volume" );
+
+    audio.setBusVolume( Rhiza::AudioBus::Ui, 1.0f );
+    audio.setBusPaused( Rhiza::AudioBus::Sfx, false );
+    audio.play( world, looping() );
+    audio.setBusPaused( Rhiza::AudioBus::Ui, true );
+    check( !silent( listen( audio ) ), "and pausing UI leaves Sfx playing" );
+}
+
+void testMasterVolume()
+{
+    std::printf( "master volume:\n" );
+    Rhiza::Audio audio;
+    audio.initialize( 4, 2, 4 );
+    const uint32_t hum = makeSound( audio, 1, 0.5f, "hum.wav" );
+    audio.play( hum, looping() );
+    std::string error;
+    audio.playMusic( sineWav( 2, 0.5f ), 0.0f, error );
+    const Loudness full = listen( audio );
+
+    audio.setMasterVolume( 0.5f );
+    const Loudness half = listen( audio );
+    check( std::fabs( half.both() - full.both() * 0.5f ) < full.both() * 0.05f, "halves everything" );
+
+    audio.setMasterVolume( 0.0f );
+    check( silent( listen( audio ) ), "zero silences sounds and music alike" );
+
+    audio.setMasterVolume( 1.0f );
+    audio.setBusVolume( Rhiza::AudioBus::Sfx, 0.0f );
+    audio.setBusVolume( Rhiza::AudioBus::Music, 0.0f );
+    check( silent( listen( audio ) ), "bus volumes still apply underneath it" );
+}
+
 void testPositional()
 {
     std::printf( "positional audio:\n" );
@@ -323,6 +375,8 @@ int main()
     testSlotsCountUniqueSounds();
     testStereoPool();
     testBuses();
+    testUiBus();
+    testMasterVolume();
     testPositional();
     testCacheAndDestroy();
     testMusic();
