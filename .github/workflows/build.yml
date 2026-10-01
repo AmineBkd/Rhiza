@@ -30,19 +30,23 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Get vcpkg commit
-        id: vcpkg-commit
+      # The runner image is part of the key because vcpkg's package hashes
+      # include the compiler: after a GitHub image update every package
+      # misses, and without a new key the rebuilt ones would never be saved.
+      - name: Get cache key inputs
+        id: cache-inputs
         shell: bash
         run: |
           mkdir -p "${{ github.workspace }}/vcpkg-binary-cache"
           echo "sha=$(git -C third_party/vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
 
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/vcpkg-binary-cache
-          key: vcpkg-${{ matrix.preset }}-${{ steps.vcpkg-commit.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ matrix.preset }}-${{ steps.cache-inputs.outputs.image }}-${{ steps.cache-inputs.outputs.sha }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: vcpkg-${{ matrix.preset }}-
 
       - name: Install Linux GL/X11 dev packages
