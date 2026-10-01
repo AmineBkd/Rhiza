@@ -38,3 +38,16 @@ add_executable(RegistryTests RegistryTests.cpp)
 target_link_libraries(RegistryTests PRIVATE RhizaFramework)
 
 add_test(NAME RegistryTests COMMAND RegistryTests)
+
+# Path keys and the asset cache's bookkeeping are pure data too, so they
+# compile straight in like Input and Clock above.
+add_executable(AssetTests AssetTests.cpp
+    ${CMAKE_SOURCE_DIR}/engine/src/core/AssetPath.cpp
+    ${CMAKE_SOURCE_DIR}/engine/src/core/AssetCache.cpp
+)
+target_include_directories(AssetTests PRIVATE
+    ${CMAKE_SOURCE_DIR}/engine/include
+    ${CMAKE_SOURCE_DIR}/engine/src
+)
+
+add_test(NAME AssetTests COMMAND AssetTests)

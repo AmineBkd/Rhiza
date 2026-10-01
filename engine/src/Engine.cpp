@@ -1,4 +1,5 @@
 #include <Rhiza/Engine.h>
+#include "core/AssetPath.h"
 #include "core/Clock.h"
 #include "platform/FileSystem.h"
 #include "platform/Input.h"
@@ -13,6 +14,7 @@ namespace Rhiza
         Renderer renderer;
         Input input;
         Clock clock;
+        std::string assetRoot;
         bool running = false;
     };
 
@@ -40,6 +42,7 @@ namespace Rhiza
             return false;
         }
 
+        mImpl->assetRoot = settings.assetRoot ? settings.assetRoot : defaultAssetRoot();
         mImpl->running = true;
         return true;
     }
@@ -115,9 +118,17 @@ namespace Rhiza
     TextureHandle Engine::loadTexture( const char *path, const TextureDesc &desc )
     {
         TextureHandle handle;
+        if( !mImpl )
+            return handle;
+
+        const std::string cacheKey = normalizeAssetPath( path );
+        handle.id = mImpl->renderer.acquireCachedTexture( cacheKey, desc );
+        if( handle.isValid() )
+            return handle;
+
         std::vector<uint8_t> encoded;
-        if( mImpl && readFile( path, encoded ) )
-            handle.id = mImpl->renderer.createTexture( encoded, path, desc );
+        if( readFile( joinAssetPath( mImpl->assetRoot, cacheKey ), encoded ) )
+            handle.id = mImpl->renderer.createTexture( encoded, cacheKey, desc );
         return handle;
     }
 

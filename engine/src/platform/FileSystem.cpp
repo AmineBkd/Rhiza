@@ -21,4 +21,10 @@ bool readFile( const std::string &path, std::vector<uint8_t> &out )
     return true;
 }
 
+std::string defaultAssetRoot()
+{
+    const char *basePath = SDL_GetBasePath();
+    return basePath ? std::string( basePath ) + "assets" : std::string();
+}
+
 }  // namespace Rhiza

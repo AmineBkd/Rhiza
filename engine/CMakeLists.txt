@@ -10,7 +10,11 @@ add_library(${PROJECT_NAME} STATIC
     src/core/Clock.cpp
     src/core/Shapes.cpp
     src/core/Math.cpp
+    src/core/AssetPath.cpp
+    src/core/AssetCache.cpp
     src/core/Clock.h
+    src/core/AssetPath.h
+    src/core/AssetCache.h
     src/core/NativeWindowHandle.h
 
     src/platform/Window.cpp

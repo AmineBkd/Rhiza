@@ -15,6 +15,10 @@ struct EngineSettings
     // makes lighting legible.
     Vec3 cameraPosition{ 3.5f, 3.0f, 5.0f };
     Vec3 cameraTarget{ 0.0f, 0.0f, 0.0f };
+
+    // Where loadTexture and loadMesh paths start. Null: the "assets" folder
+    // next to the executable.
+    const char *assetRoot = nullptr;
 };
 
 }  // namespace Rhiza

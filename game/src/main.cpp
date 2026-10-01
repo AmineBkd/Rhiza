@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cmath>
-#include <string>
 
 #include <Rhiza/Components/MeshRenderer.h>
 #include <Rhiza/Engine.h>
@@ -15,17 +14,8 @@
 #include <Rhiza/Types/Math.h>
 #include <Rhiza/Types/Texture.h>
 
-#ifndef EXPANSUM_ASSET_DIR
-#    error "EXPANSUM_ASSET_DIR must be defined by CMake"
-#endif
-
 namespace
 {
-
-std::string asset( const char *name )
-{
-    return std::string( EXPANSUM_ASSET_DIR ) + "/" + name;
-}
 
 constexpr Rhiza::Vec3 kZAxis{ 0.0f, 0.0f, 1.0f };
 
@@ -67,7 +57,7 @@ int main( int argc, char *argv[] )
 
     Rhiza::MaterialDesc shipMaterial;
     shipMaterial.shading = Rhiza::ShadingModel::Unlit;
-    shipMaterial.texture = engine.loadTexture( asset( "ship.png" ).c_str(), pixelArt );
+    shipMaterial.texture = engine.loadTexture( "ship.png", pixelArt );
     shipMaterial.blend = Rhiza::BlendMode::AlphaBlend;
     const Rhiza::Entity ship = spawn( quad, engine.createMaterial( shipMaterial ),
                                       { { 0.0f, 0.0f, 1.0f }, {}, { 1.5f, 1.5f, 1.0f } } );
@@ -75,7 +65,7 @@ int main( int argc, char *argv[] )
     Rhiza::MaterialDesc flameMaterial;
     flameMaterial.shading = Rhiza::ShadingModel::Unlit;
     flameMaterial.color = { 1.0f, 0.55f, 0.15f, 1.0f };
-    flameMaterial.texture = engine.loadTexture( asset( "glow.png" ).c_str() );
+    flameMaterial.texture = engine.loadTexture( "glow.png" );
     flameMaterial.blend = Rhiza::BlendMode::Additive;
     const Rhiza::Entity flame = spawn( quad, engine.createMaterial( flameMaterial ), {} );
 

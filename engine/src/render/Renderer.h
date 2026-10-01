@@ -13,6 +13,7 @@
 #include <Rhiza/Types/Mesh.h>
 #include <Rhiza/Types/Texture.h>
 
+#include "core/AssetCache.h"
 #include "core/NativeWindowHandle.h"
 
 namespace Ogre
@@ -54,21 +55,31 @@ public:
 
     // 0 if the description is unusable or the GPU buffers could not be
     // allocated; the reason goes to the log. Same for createInstance below.
-    uint32_t createMeshAsset( const MeshDesc &desc );
+    // An empty `cacheKey` makes a unique mesh that acquireCachedMesh never
+    // returns - right for procedural and mutable geometry.
+    uint32_t createMeshAsset( const MeshDesc &desc, const std::string &cacheKey = {} );
 
     // No-op (logged) unless `handle` was created with MeshDesc::isMutable.
     void updateMesh( uint32_t handle, const MeshDesc &desc );
 
-    // Both refuse (and log) while any instance still references them.
+    // A cached asset is freed by the destroy matching its last load. Both
+    // refuse (and log) while any instance still references them.
     void destroyMeshAsset( uint32_t handle );
     void destroyMaterial( uint32_t handle );
 
     // `encoded` is the file's bytes, not decoded pixels.
-    uint32_t createTexture( const std::vector<uint8_t> &encoded, const std::string &sourceName,
+    uint32_t createTexture( const std::vector<uint8_t> &encoded, const std::string &cacheKey,
                             const TextureDesc &desc );
 
     // Refuses (and logs) while any material still references it.
     void destroyTexture( uint32_t handle );
+
+    // The handle already loaded under `cacheKey`, counted as one more load;
+    // 0 if nothing is.
+    uint32_t acquireCachedMesh( const std::string &cacheKey );
+    uint32_t acquireCachedTexture( const std::string &cacheKey, const TextureDesc &desc );
+
+    void reportError( const std::string &message );
 
     uint32_t createMaterial( const MaterialDesc &desc );
 
@@ -159,6 +170,8 @@ private:
     std::unordered_map<uint32_t, MeshAsset> mMeshAssets;
     std::unordered_map<uint32_t, MaterialAsset> mMaterials;
     std::unordered_map<uint32_t, TextureAsset> mTextures;
+    AssetCache mMeshCache;
+    AssetCache mTextureCache;
     std::unordered_map<uint32_t, Instance> mInstances;
     std::unordered_map<uint32_t, LightInstance> mLights;
 };

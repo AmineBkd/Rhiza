@@ -65,6 +65,10 @@ public:
     // instance picks up the change with nothing to update per-instance.
     void updateMesh(MeshHandle mesh, const MeshDesc &desc);
 
+    // Loading: paths are relative to EngineSettings::assetRoot, and the same
+    // path returns the same handle without loading again. Every load needs
+    // its own destroy; the last one frees the asset.
+
     // Refused while any instance still references it.
     void destroyMeshAsset(MeshHandle mesh);
 

@@ -1,5 +1,7 @@
 #include "Renderer.h"
 
+#include "core/AssetPath.h"
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -481,6 +483,8 @@ void Renderer::shutdown()
     mMeshAssets.clear();
     mMaterials.clear();
     mTextures.clear();
+    mMeshCache.clear();
+    mTextureCache.clear();
     mInstances.clear();
     mLights.clear();
 
@@ -519,7 +523,7 @@ void Renderer::renderOneFrame()
     }
 }
 
-uint32_t Renderer::createMeshAsset( const MeshDesc &desc )
+uint32_t Renderer::createMeshAsset( const MeshDesc &desc, const std::string &cacheKey )
 {
     const std::string problem = findMeshProblem( desc );
     if( !problem.empty() )
@@ -544,10 +548,21 @@ uint32_t Renderer::createMeshAsset( const MeshDesc &desc )
     }
 
     const uint32_t handle = mNextHandle++;
-    const Ogre::String meshName = "RhizaMesh_" + Ogre::StringConverter::toString( handle );
+    const Ogre::String meshName =
+        cacheKey.empty() ? "RhizaMesh_" + Ogre::StringConverter::toString( handle ) : cacheKey;
 
-    Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().createManual(
-        meshName, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
+    Ogre::MeshPtr mesh;
+    try
+    {
+        mesh = Ogre::MeshManager::getSingleton().createManual(
+            meshName, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
+    }
+    catch( Ogre::Exception &e )
+    {
+        destroyVao( vao, vaoManager );
+        logError( "createMeshAsset could not register '" + meshName + "': " + e.getDescription() );
+        return 0;
+    }
     Ogre::SubMesh *subMesh = mesh->createSubMesh();
     subMesh->mVao[Ogre::VpNormal].push_back( vao );
     subMesh->mVao[Ogre::VpShadow].push_back( vao );
@@ -557,6 +572,8 @@ uint32_t Renderer::createMeshAsset( const MeshDesc &desc )
     asset.name = meshName;
     asset.isMutable = desc.isMutable;
     mMeshAssets[handle] = std::move( asset );
+    if( !cacheKey.empty() )
+        mMeshCache.add( cacheKey, handle );
 
     return handle;
 }
@@ -640,21 +657,41 @@ void Renderer::destroyMeshAsset( uint32_t handle )
     if( it == mMeshAssets.end() )
         return;
 
-    if( it->second.instanceRefCount != 0 )
+    if( mMeshCache.releaseIfShared( handle ) )
+        return;
+
+    const MeshAsset &asset = it->second;
+    if( asset.instanceRefCount != 0 )
     {
-        logError( "destroyMeshAsset refused: '" + it->second.name + "' still has " +
-                  std::to_string( it->second.instanceRefCount ) + " instance(s) referencing it" );
+        logError( "destroyMeshAsset refused: '" + asset.name + "' still has " +
+                  std::to_string( asset.instanceRefCount ) + " instance(s) referencing it" );
         return;
     }
 
     // Cascades: ~SubMesh destroys its Vaos and the buffers behind them, and
     // handles our one Vao shared between VpNormal and VpShadow without
     // double-freeing.
-    Ogre::MeshManager::getSingleton().remove( it->second.name );
+    Ogre::MeshManager::getSingleton().remove( asset.name );
+    mMeshCache.forget( handle );
     mMeshAssets.erase( it );
 }
 
-uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std::string &sourceName,
+uint32_t Renderer::acquireCachedMesh( const std::string &cacheKey )
+{
+    return mMeshCache.acquire( cacheKey );
+}
+
+uint32_t Renderer::acquireCachedTexture( const std::string &cacheKey, const TextureDesc &desc )
+{
+    return mTextureCache.acquire( textureCacheKey( cacheKey, desc ) );
+}
+
+void Renderer::reportError( const std::string &message )
+{
+    logError( message );
+}
+
+uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std::string &cacheKey,
                                   const TextureDesc &desc )
 {
     // Ogre's streaming thread uploads and deletes it later.
@@ -663,33 +700,43 @@ uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std
     {
         Ogre::DataStreamPtr stream( OGRE_NEW Ogre::MemoryDataStream(
             const_cast<uint8_t *>( encoded.data() ), encoded.size(), false, true ) );
-        image->load2( stream, sourceName );
+        image->load2( stream, cacheKey );
     }
     catch( Ogre::Exception &e )
     {
         delete image;
-        logError( "could not decode texture '" + sourceName + "': " + e.getDescription() );
+        logError( "could not decode texture '" + cacheKey + "': " + e.getDescription() );
         return 0;
     }
-
-    const uint32_t handle = mNextHandle++;
-    const Ogre::String name = "RhizaTexture_" + Ogre::StringConverter::toString( handle );
 
     const Ogre::uint32 filters = desc.filter == TextureFilter::Linear
                                      ? Ogre::TextureFilter::TypeGenerateDefaultMipmaps
                                      : 0u;
 
     // Not sRGB: the backbuffer isn't either, so pixels come out as authored.
+    const std::string alias = textureCacheKey( cacheKey, desc );
     Ogre::TextureGpuManager *textureManager = mRoot->getRenderSystem()->getTextureGpuManager();
-    Ogre::TextureGpu *texture = textureManager->createTexture(
-        name, Ogre::GpuPageOutStrategy::Discard, Ogre::TextureFlags::AutomaticBatching,
-        Ogre::TextureTypes::Type2D, Ogre::BLANKSTRING, filters );
+    Ogre::TextureGpu *texture = nullptr;
+    try
+    {
+        texture = textureManager->createTexture( cacheKey, alias, Ogre::GpuPageOutStrategy::Discard,
+                                                 Ogre::TextureFlags::AutomaticBatching,
+                                                 Ogre::TextureTypes::Type2D, Ogre::BLANKSTRING, filters );
+    }
+    catch( Ogre::Exception &e )
+    {
+        delete image;
+        logError( "could not create texture '" + alias + "': " + e.getDescription() );
+        return 0;
+    }
     texture->scheduleTransitionTo( Ogre::GpuResidency::Resident, image );
 
+    const uint32_t handle = mNextHandle++;
     TextureAsset asset;
     asset.texture = texture;
     asset.desc = desc;
     mTextures[handle] = asset;
+    mTextureCache.add( alias, handle );
 
     return handle;
 }
@@ -700,14 +747,24 @@ void Renderer::destroyTexture( uint32_t handle )
     if( it == mTextures.end() )
         return;
 
-    if( it->second.materialRefCount != 0 )
+    if( mTextureCache.releaseIfShared( handle ) )
+        return;
+
+    const TextureAsset &asset = it->second;
+    if( asset.materialRefCount != 0 )
     {
-        logError( "destroyTexture refused: '" + it->second.texture->getNameStr() + "' still has " +
-                  std::to_string( it->second.materialRefCount ) + " material(s) referencing it" );
+        logError( "destroyTexture refused: '" + asset.texture->getNameStr() + "' still has " +
+                  std::to_string( asset.materialRefCount ) + " material(s) referencing it" );
         return;
     }
 
-    mRoot->getRenderSystem()->getTextureGpuManager()->destroyTexture( it->second.texture );
+    // Ogre defers destroying a texture that is still streaming in, and its
+    // name stays taken until then, so loading the same file again straight
+    // away would collide. Waiting makes the destroy immediate; it only stalls
+    // when a texture is freed moments after being loaded.
+    asset.texture->waitForData();
+    mRoot->getRenderSystem()->getTextureGpuManager()->destroyTexture( asset.texture );
+    mTextureCache.forget( handle );
     mTextures.erase( it );
 }
 
