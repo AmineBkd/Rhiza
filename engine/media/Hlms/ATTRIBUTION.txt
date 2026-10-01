@@ -1,7 +1,8 @@
 These shader template files (.any / .hlsl) are copied unmodified from the
 OGRE-Next project (https://github.com/OGRECave/ogre-next), from its
 Samples/Media/Hlms directory, matching the v3.0.0 tag used by vcpkg's
-ogre-next port. OGRE-Next is MIT licensed (see its COPYING file).
+ogre-next port. OGRE-Next is MIT licensed; its licence, which must travel
+with these copies, is in COPYING beside this file.
 
 The vcpkg ogre-next port builds and installs the Hlms *compiled* libraries
 (OgreNextHlmsUnlit, OgreNextHlmsPbs, ...) but does not install these *source*

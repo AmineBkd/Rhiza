@@ -15,9 +15,9 @@
 namespace Rhiza
 {
 
-// Facade over the engine's window (SDL3) and renderer (Ogre-Next). Nothing
-// outside engine/src ever includes an SDL or Ogre header: this class and
-// Types.h are the entire public surface.
+// Facade over the engine's window and input (SDL3), renderer (Ogre-Next) and
+// audio (miniaudio). Nothing outside engine/src ever includes their headers:
+// this class and Rhiza/Types/ are the entire public surface.
 class Engine
 {
 public:
@@ -97,7 +97,6 @@ public:
     // The mesh asset and material survive; others may still reference them.
     void destroyInstance(InstanceHandle instance);
 
-    void setPosition(InstanceHandle handle, Vec3 position);
     void setTransform(InstanceHandle handle, const Transform &transform);
 
     // Only ShadingModel::Lit materials respond to lights.
@@ -147,7 +146,7 @@ public:
     void setListener(const ListenerDesc &listener);
     void followCameraWithListener();
 
-    // Keys are identified by physical position - see Key in Types.h.
+    // Keys are identified by physical position - see Key in Types/Input.h.
     // wasKeyPressed/Released are true only on the frame of the transition;
     // holding a key does not repeat them.
     bool isKeyDown(Key key) const;

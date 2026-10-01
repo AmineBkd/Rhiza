@@ -89,9 +89,9 @@ bool Window::initialize( const std::string &title, int width, int height )
     SDL_SetHint( SDL_HINT_VIDEO_DRIVER, "x11" );
 #endif
 
-    if( !SDL_Init( SDL_INIT_VIDEO ) )
+    if( !SDL_InitSubSystem( SDL_INIT_VIDEO ) )
     {
-        SDL_Log( "SDL_Init failed: %s", SDL_GetError() );
+        SDL_Log( "SDL video unavailable: %s", SDL_GetError() );
         return false;
     }
 
@@ -101,7 +101,7 @@ bool Window::initialize( const std::string &title, int width, int height )
     if( !mWindow )
     {
         SDL_Log( "SDL_CreateWindow failed: %s", SDL_GetError() );
-        SDL_Quit();
+        SDL_QuitSubSystem( SDL_INIT_VIDEO );
         return false;
     }
 
@@ -114,7 +114,7 @@ void Window::shutdown()
     {
         SDL_DestroyWindow( mWindow );
         mWindow = nullptr;
-        SDL_Quit();
+        SDL_QuitSubSystem( SDL_INIT_VIDEO );
     }
 }
 

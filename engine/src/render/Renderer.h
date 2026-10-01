@@ -91,7 +91,6 @@ public:
     uint32_t createInstance( uint32_t meshHandle, uint32_t materialHandle );
     void destroyInstance( uint32_t handle );
 
-    void setPosition( uint32_t handle, Vec3 position );
     void setTransform( uint32_t handle, const Transform &transform );
 
     uint32_t createLight( const LightDesc &desc );

@@ -10,6 +10,7 @@
 #include "platform/AudioOutput.h"
 #include "platform/FileSystem.h"
 #include "platform/Input.h"
+#include "platform/PlatformLifetime.h"
 #include "render/Renderer.h"
 #include "platform/Window.h"
 
@@ -17,6 +18,7 @@ namespace Rhiza
 {
     struct Engine::Impl
     {
+        PlatformLifetime platform;  // first, so it is destroyed last
         Window window;
         Renderer renderer;
         Input input;
@@ -297,12 +299,6 @@ namespace Rhiza
     {
         if( mImpl && instance.isValid() )
             mImpl->renderer.destroyInstance( instance.id );
-    }
-
-    void Engine::setPosition( InstanceHandle handle, Vec3 position )
-    {
-        if( mImpl && handle.isValid() )
-            mImpl->renderer.setPosition( handle.id, position );
     }
 
     void Engine::setTransform( InstanceHandle handle, const Transform &transform )

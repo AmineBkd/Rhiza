@@ -190,7 +190,7 @@ std::string findMeshProblem( const MeshDesc &desc )
     return {};
 }
 
-// Builds the position+normal interleaved Vao. Shared by createMeshAsset and
+// Builds the interleaved position/normal/UV Vao. Shared by createMeshAsset and
 // updateMesh's rebuild path so the two can't drift on element layout.
 // Throws Ogre::Exception on allocation failure; callers own the try/catch.
 Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoManager,
@@ -802,8 +802,15 @@ void Renderer::destroyTexture( uint32_t handle )
     // name stays taken until then, so loading the same file again straight
     // away would collide. Waiting makes the destroy immediate; it only stalls
     // when a texture is freed moments after being loaded.
-    asset.texture->waitForData();
-    mRoot->getRenderSystem()->getTextureGpuManager()->destroyTexture( asset.texture );
+    try
+    {
+        asset.texture->waitForData();
+        mRoot->getRenderSystem()->getTextureGpuManager()->destroyTexture( asset.texture );
+    }
+    catch( Ogre::Exception &e )
+    {
+        logError( "destroyTexture failed: " + e.getDescription() );
+    }
     mTextureCache.forget( handle );
     mTextures.erase( it );
 }
@@ -826,7 +833,15 @@ uint32_t Renderer::createMaterial( const MaterialDesc &desc )
     const Ogre::String name = "RhizaMaterial_" + Ogre::StringConverter::toString( handle );
 
     MaterialAsset asset;
-    asset.datablock = createDatablock( name, desc, texture );
+    try
+    {
+        asset.datablock = createDatablock( name, desc, texture );
+    }
+    catch( Ogre::Exception &e )
+    {
+        logError( "createMaterial failed: " + e.getDescription() );
+        return 0;
+    }
     asset.textureHandle = desc.texture.id;
     mMaterials[handle] = asset;
 
@@ -850,7 +865,14 @@ void Renderer::destroyMaterial( uint32_t handle )
     }
 
     Ogre::HlmsDatablock *datablock = it->second.datablock;
-    datablock->getCreator()->destroyDatablock( datablock->getName() );
+    try
+    {
+        datablock->getCreator()->destroyDatablock( datablock->getName() );
+    }
+    catch( Ogre::Exception &e )
+    {
+        logError( "destroyMaterial failed: " + e.getDescription() );
+    }
 
     auto textureIt = mTextures.find( it->second.textureHandle );
     if( textureIt != mTextures.end() )
@@ -877,12 +899,26 @@ uint32_t Renderer::createInstance( uint32_t meshHandle, uint32_t materialHandle 
     Ogre::MeshPtr mesh = Ogre::MeshManager::getSingleton().getByName(
         meshIt->second.name, Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME );
 
-    Ogre::Item *item = mSceneManager->createItem( mesh, Ogre::SCENE_DYNAMIC );
-    item->getSubItem( 0 )->setDatablock( materialIt->second.datablock );
+    Ogre::Item *item = nullptr;
+    Ogre::SceneNode *sceneNode = nullptr;
+    try
+    {
+        item = mSceneManager->createItem( mesh, Ogre::SCENE_DYNAMIC );
+        item->getSubItem( 0 )->setDatablock( materialIt->second.datablock );
 
-    Ogre::SceneNode *sceneNode = mSceneManager->getRootSceneNode( Ogre::SCENE_DYNAMIC )
-                                     ->createChildSceneNode( Ogre::SCENE_DYNAMIC );
-    sceneNode->attachObject( item );
+        sceneNode = mSceneManager->getRootSceneNode( Ogre::SCENE_DYNAMIC )
+                        ->createChildSceneNode( Ogre::SCENE_DYNAMIC );
+        sceneNode->attachObject( item );
+    }
+    catch( Ogre::Exception &e )
+    {
+        if( item )
+            mSceneManager->destroyItem( item );
+        if( sceneNode )
+            mSceneManager->destroySceneNode( sceneNode );
+        logError( "createInstance failed: " + e.getDescription() );
+        return 0;
+    }
 
     const uint32_t handle = mNextHandle++;
     Instance instance;
@@ -906,8 +942,15 @@ void Renderer::destroyInstance( uint32_t handle )
 
     const Instance &instance = it->second;
 
-    mSceneManager->destroyItem( instance.item );
-    mSceneManager->destroySceneNode( instance.node );
+    try
+    {
+        mSceneManager->destroyItem( instance.item );
+        mSceneManager->destroySceneNode( instance.node );
+    }
+    catch( Ogre::Exception &e )
+    {
+        logError( "destroyInstance failed: " + e.getDescription() );
+    }
 
     auto meshIt = mMeshAssets.find( instance.meshAssetHandle );
     if( meshIt != mMeshAssets.end() )
@@ -918,14 +961,6 @@ void Renderer::destroyInstance( uint32_t handle )
         --materialIt->second.instanceRefCount;
 
     mInstances.erase( it );
-}
-
-void Renderer::setPosition( uint32_t handle, Vec3 position )
-{
-    auto it = mInstances.find( handle );
-    if( it == mInstances.end() )
-        return;
-    it->second.node->setPosition( position.x, position.y, position.z );
 }
 
 void Renderer::setTransform( uint32_t handle, const Transform &transform )
@@ -1004,9 +1039,23 @@ Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
 
 uint32_t Renderer::createLight( const LightDesc &desc )
 {
-    Ogre::Light *light = mSceneManager->createLight();
-    Ogre::SceneNode *node = mSceneManager->getRootSceneNode()->createChildSceneNode();
-    node->attachObject( light );
+    Ogre::Light *light = nullptr;
+    Ogre::SceneNode *node = nullptr;
+    try
+    {
+        light = mSceneManager->createLight();
+        node = mSceneManager->getRootSceneNode()->createChildSceneNode();
+        node->attachObject( light );
+    }
+    catch( Ogre::Exception &e )
+    {
+        if( light )
+            mSceneManager->destroyLight( light );
+        if( node )
+            mSceneManager->destroySceneNode( node );
+        logError( "createLight failed: " + e.getDescription() );
+        return 0;
+    }
 
     light->setDiffuseColour( toOgre( desc.color ) );
     light->setSpecularColour( toOgre( desc.color ) );
@@ -1038,8 +1087,15 @@ void Renderer::destroyLight( uint32_t handle )
     if( it == mLights.end() )
         return;
 
-    mSceneManager->destroyLight( it->second.light );
-    mSceneManager->destroySceneNode( it->second.node );
+    try
+    {
+        mSceneManager->destroyLight( it->second.light );
+        mSceneManager->destroySceneNode( it->second.node );
+    }
+    catch( Ogre::Exception &e )
+    {
+        logError( "destroyLight failed: " + e.getDescription() );
+    }
     mLights.erase( it );
 }
 
@@ -1059,6 +1115,13 @@ void Renderer::setCamera( Vec3 position, Vec3 target )
 
 void Renderer::setCamera( const CameraDesc &camera )
 {
+    // Ogre throws on this one, after the other settings would have applied.
+    if( !( camera.nearClip > 0.0f ) )
+    {
+        logError( "setCamera rejected a near clip distance that is not above zero" );
+        return;
+    }
+
     const bool ortho = camera.projection == Projection::Orthographic;
     mCamera->setProjectionType( ortho ? Ogre::PT_ORTHOGRAPHIC : Ogre::PT_PERSPECTIVE );
     if( ortho )
