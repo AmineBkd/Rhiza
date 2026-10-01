@@ -359,6 +359,26 @@ Ogre::HlmsSamplerblock toSamplerblock( const TextureDesc &desc )
 
 }  // namespace
 
+// D3D11 never throws on a lost device: Present returns quietly and the next
+// frame rebuilds the device, with our VRAM-only geometry gone. This event is
+// the only notice.
+class DeviceLossListener final : public Ogre::RenderSystem::Listener
+{
+public:
+    explicit DeviceLossListener( bool &deviceLost ) : mDeviceLost( deviceLost ) {}
+
+    void eventOccurred( const Ogre::String &eventName, const Ogre::NameValuePairList * ) override
+    {
+        if( eventName == "DeviceLost" )
+            mDeviceLost = true;
+    }
+
+private:
+    bool &mDeviceLost;
+};
+
+Renderer::Renderer() = default;
+
 Renderer::~Renderer()
 {
     shutdown();
@@ -398,6 +418,8 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
     }
 
     mRoot->setRenderSystem( renderSystem );
+    mDeviceLossListener = std::make_unique<DeviceLossListener>( mDeviceLost );
+    renderSystem->addListener( mDeviceLossListener.get() );
     mRoot->initialise( false );
 
     // "externalWindowHandle" means the same thing everywhere: render into a
@@ -508,6 +530,7 @@ void Renderer::shutdown()
     mRoot = nullptr;
     mRenderWindow = nullptr;
     mCamera = nullptr;
+    mDeviceLossListener.reset();
 }
 
 void Renderer::renderOneFrame()
@@ -515,17 +538,24 @@ void Renderer::renderOneFrame()
     if( mDeviceLost )
         return;
 
-    // The only per-frame Ogre call, and the one that throws on a lost
-    // device. There is no in-process recovery: flag it and stop.
     try
     {
-        mRoot->renderOneFrame();
+        // False only when the device is still unusable after Ogre tried to
+        // recover it; we register no frame listeners that could also stop it.
+        if( !mRoot->renderOneFrame() )
+            mDeviceLost = true;
     }
     catch( Ogre::Exception &e )
     {
-        logError( "device lost while rendering: " + e.getDescription() );
+        // The frame is left half-drawn. Vulkan's device loss also arrives as
+        // a throw, with VK_ERROR_DEVICE_LOST in getNumber().
+        logError( "rendering failed, stopping as if the device were lost: " + e.getDescription() );
         mDeviceLost = true;
+        return;
     }
+
+    if( mDeviceLost )
+        logError( "GPU device lost; rendering stopped" );
 }
 
 uint32_t Renderer::createMeshAsset( const MeshDesc &desc, const std::string &cacheKey )

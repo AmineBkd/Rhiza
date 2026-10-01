@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -33,6 +34,8 @@ class TextureGpu;
 namespace Rhiza
 {
 
+class DeviceLossListener;
+
 // Owns every Ogre-Next object. Knows nothing about SDL; Window.h must never
 // be included here.
 //
@@ -42,6 +45,7 @@ namespace Rhiza
 class Renderer
 {
 public:
+    Renderer();
     ~Renderer();
 
     bool initialize( const NativeWindowHandle &windowHandle, const EngineSettings &settings );
@@ -164,6 +168,7 @@ private:
     Ogre::Window *mRenderWindow = nullptr;
     Ogre::CompositorWorkspace *mWorkspace = nullptr;
     bool mDeviceLost = false;
+    std::unique_ptr<DeviceLossListener> mDeviceLossListener;
 
     // One counter shared across every map below, so a handle value is never
     // ambiguous between them.
