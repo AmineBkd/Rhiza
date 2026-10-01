@@ -68,6 +68,9 @@ public:
     // Loading: paths are relative to EngineSettings::assetRoot, and the same
     // path returns the same handle without loading again. Every load needs
     // its own destroy; the last one frees the asset.
+    //
+    // Paths are case-sensitive. Windows and macOS forgive "Ship.png" for
+    // ship.png - with a warning in the log - but Linux and Android won't.
 
     // glTF (.gltf or .glb), static geometry only. Never mutable: updateMesh
     // on a shared mesh would change it for every user.

@@ -305,12 +305,17 @@ void replaceGeometry( Ogre::SubMesh &subMesh, const MeshDesc &desc, Ogre::VaoMan
 
 // Ogre's log is the one place these messages are useful, but it only exists
 // once Root has been constructed - and initialize() can fail before that.
-void logError( const std::string &message )
+void logMessage( const std::string &message, Ogre::LogMessageLevel level )
 {
     if( Ogre::LogManager::getSingletonPtr() )
-        Ogre::LogManager::getSingleton().logMessage( "[Rhiza] " + message, Ogre::LML_CRITICAL );
+        Ogre::LogManager::getSingleton().logMessage( "[Rhiza] " + message, level );
     else
         fprintf( stderr, "[Rhiza] %s\n", message.c_str() );
+}
+
+void logError( const std::string &message )
+{
+    logMessage( message, Ogre::LML_CRITICAL );
 }
 
 Ogre::Vector3 toOgre( const Vec3 &v )
@@ -689,6 +694,11 @@ uint32_t Renderer::acquireCachedTexture( const std::string &cacheKey, const Text
 void Renderer::reportError( const std::string &message )
 {
     logError( message );
+}
+
+void Renderer::reportWarning( const std::string &message )
+{
+    logMessage( "warning: " + message, Ogre::LML_NORMAL );
 }
 
 uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std::string &cacheKey,

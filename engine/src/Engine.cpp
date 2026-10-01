@@ -17,6 +17,17 @@ namespace Rhiza
         Clock clock;
         std::string assetRoot;
         bool running = false;
+
+        // Loads anyway: the spelling works on this file system, just not on
+        // case-sensitive ones.
+        void warnIfCaseDiffers( const std::string &cacheKey )
+        {
+            const std::string spelledOnDisk = findCaseMismatch( assetRoot, cacheKey );
+            if( !spelledOnDisk.empty() )
+                renderer.reportWarning( "asset '" + cacheKey + "' is spelled '" + spelledOnDisk +
+                                        "' on disk. It loads here, but asset paths are "
+                                        "case-sensitive, so it will fail on Linux and Android." );
+        }
     };
 
     Engine::Engine() = default;
@@ -131,6 +142,7 @@ namespace Rhiza
         std::vector<uint8_t> bytes;
         if( !readFile( fullPath, bytes ) )
             return handle;
+        mImpl->warnIfCaseDiffers( cacheKey );
 
         MeshDesc desc;
         std::string error;
@@ -156,8 +168,11 @@ namespace Rhiza
             return handle;
 
         std::vector<uint8_t> encoded;
-        if( readFile( joinAssetPath( mImpl->assetRoot, cacheKey ), encoded ) )
-            handle.id = mImpl->renderer.createTexture( encoded, cacheKey, desc );
+        if( !readFile( joinAssetPath( mImpl->assetRoot, cacheKey ), encoded ) )
+            return handle;
+        mImpl->warnIfCaseDiffers( cacheKey );
+
+        handle.id = mImpl->renderer.createTexture( encoded, cacheKey, desc );
         return handle;
     }
 

@@ -1,6 +1,6 @@
-// Tests for asset keys, the cache's bookkeeping and glTF mesh parsing. All
-// pure data - no GPU, window or file system - so they run anywhere, CI
-// included.
+// Tests for asset keys, the cache's bookkeeping and glTF mesh parsing. No
+// GPU or window, so they run anywhere, CI included; only the case-mismatch
+// check touches the file system, in a temp folder of its own.
 
 #include "core/AssetCache.h"
 #include "core/AssetPath.h"
@@ -9,7 +9,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace
@@ -247,6 +250,31 @@ void testSameNameInDifferentFolders()
            "texture keys differ too" );
 }
 
+// Compares names rather than asking the file system, so it reports the same
+// on case-insensitive Windows/macOS and case-sensitive Linux.
+void testFindCaseMismatch()
+{
+    std::printf( "case mismatch against the names on disk:\n" );
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "rhiza_asset_tests";
+    std::error_code error;
+    fs::remove_all( root, error );
+    fs::create_directories( root / "Textures", error );
+    std::ofstream( root / "Textures" / "Ship.png" ).put( 'x' );
+    const std::string rootText = root.string();
+
+    check( Rhiza::findCaseMismatch( rootText, "Textures/Ship.png" ).empty(), "exact spelling: no warning" );
+    check( Rhiza::findCaseMismatch( rootText, "textures/ship.png" ) == "Textures/Ship.png",
+           "wrong case reports the spelling on disk" );
+    check( Rhiza::findCaseMismatch( rootText, "Textures/ship.png" ) == "Textures/Ship.png",
+           "a mismatch in the file name alone is caught" );
+    check( Rhiza::findCaseMismatch( rootText, "Textures/missing.png" ).empty(), "missing file: no warning" );
+    check( Rhiza::findCaseMismatch( ( root / "nowhere" ).string(), "Ship.png" ).empty(),
+           "root that is not a folder: no warning" );
+
+    fs::remove_all( root, error );
+}
+
 void testTextureCacheKey()
 {
     std::printf( "texture keys: settings are part of identity:\n" );
@@ -389,6 +417,7 @@ int main()
     testCacheFreesOnTheLastRelease();
     testCacheIgnoresUnknownHandles();
     testSameNameInDifferentFolders();
+    testFindCaseMismatch();
     testTextureCacheKey();
     testTriangle();
     testNodeTranslation();

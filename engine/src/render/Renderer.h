@@ -80,6 +80,7 @@ public:
     uint32_t acquireCachedTexture( const std::string &cacheKey, const TextureDesc &desc );
 
     void reportError( const std::string &message );
+    void reportWarning( const std::string &message );
 
     uint32_t createMaterial( const MaterialDesc &desc );
 
