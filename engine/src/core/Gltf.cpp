@@ -1,6 +1,5 @@
 #include "Gltf.h"
 
-#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -16,22 +15,6 @@ namespace
 {
 
 constexpr size_t kMaxVertices = 65536;  // what MeshDesc's 16-bit indices can address
-
-Vec3 add( Vec3 a, Vec3 b ) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
-Vec3 subtract( Vec3 a, Vec3 b ) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
-Vec3 scale( Vec3 v, float s ) { return { v.x * s, v.y * s, v.z * s }; }
-float dot( Vec3 a, Vec3 b ) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-
-Vec3 cross( Vec3 a, Vec3 b )
-{
-    return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x };
-}
-
-Vec3 normalized( Vec3 v )
-{
-    const float length = std::sqrt( dot( v, v ) );
-    return length > 0.0f ? scale( v, 1.0f / length ) : v;
-}
 
 // glTF matrices are column-major.
 struct NodeTransform
@@ -70,9 +53,8 @@ Vec3 transformPoint( const NodeTransform &t, Vec3 p )
 
 Vec3 transformNormal( const NodeTransform &t, Vec3 n )
 {
-    const Vec3 r = add( add( scale( t.normalColumns[0], n.x ), scale( t.normalColumns[1], n.y ) ),
-                        scale( t.normalColumns[2], n.z ) );
-    return normalized( t.mirrored ? scale( r, -1.0f ) : r );
+    const Vec3 r = t.normalColumns[0] * n.x + t.normalColumns[1] * n.y + t.normalColumns[2] * n.z;
+    return normalized( t.mirrored ? -r : r );
 }
 
 // Area-weighted: the unnormalised cross product is twice the face's area.
@@ -83,10 +65,10 @@ void generateSmoothNormals( MeshDesc &mesh, size_t firstVertex, size_t firstInde
         Vertex &a = mesh.vertices[mesh.indices[i]];
         Vertex &b = mesh.vertices[mesh.indices[i + 1]];
         Vertex &c = mesh.vertices[mesh.indices[i + 2]];
-        const Vec3 face = cross( subtract( b.position, a.position ), subtract( c.position, a.position ) );
-        a.normal = add( a.normal, face );
-        b.normal = add( b.normal, face );
-        c.normal = add( c.normal, face );
+        const Vec3 face = cross( b.position - a.position, c.position - a.position );
+        a.normal += face;
+        b.normal += face;
+        c.normal += face;
     }
     for( size_t i = firstVertex; i < mesh.vertices.size(); ++i )
         mesh.vertices[i].normal = normalized( mesh.vertices[i].normal );

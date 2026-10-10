@@ -1,7 +1,6 @@
 #include <Rhiza/Engine.h>
 
 #include <algorithm>
-#include <cmath>
 
 #include "audio/Audio.h"
 #include "core/AssetPath.h"
@@ -87,11 +86,7 @@ namespace Rhiza
 
         void listenFrom( Vec3 position, Vec3 target )
         {
-            Vec3 forward{ target.x - position.x, target.y - position.y, target.z - position.z };
-            const float length = std::sqrt( forward.x * forward.x + forward.y * forward.y + forward.z * forward.z );
-            if( length > 0.0f )
-                forward = { forward.x / length, forward.y / length, forward.z / length };
-            audio.setListener( position, forward, { 0.0f, 1.0f, 0.0f }, {} );
+            audio.setListener( position, normalized( target - position ), { 0.0f, 1.0f, 0.0f }, {} );
         }
     };
 

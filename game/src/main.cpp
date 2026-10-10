@@ -115,20 +115,14 @@ int main( int argc, char *argv[] )
         if( engine.isKeyDown( Rhiza::Key::D ) )
             heading -= turnRate * dt;
 
-        const float forwardX = -std::sin( heading );
-        const float forwardY = std::cos( heading );
+        const Rhiza::Vec3 forward{ -std::sin( heading ), std::cos( heading ), 0.0f };
         const bool thrusting = engine.isKeyDown( Rhiza::Key::W );
         if( thrusting )
-        {
-            velocity.x += forwardX * thrust * dt;
-            velocity.y += forwardY * thrust * dt;
-        }
-        velocity.x -= velocity.x * drag * dt;
-        velocity.y -= velocity.y * drag * dt;
+            velocity += forward * ( thrust * dt );
+        velocity -= velocity * ( drag * dt );
 
         Rhiza::Transform *shipTransform = registry.getComponent<Rhiza::Transform>( ship );
-        shipTransform->position.x += velocity.x * dt;
-        shipTransform->position.y += velocity.y * dt;
+        shipTransform->position += velocity * dt;
         shipTransform->rotation = Rhiza::Quat::fromAxisAngle( kZAxis, heading );
 
         // No velocity for the ship's own sounds: the listener rides along with
@@ -159,8 +153,8 @@ int main( int argc, char *argv[] )
         Rhiza::Transform *flameTransform = registry.getComponent<Rhiza::Transform>( flame );
         const float flameLength = thrusting ? 1.4f + 0.2f * std::sin( time * 40.0f ) : 0.5f;
         const float behind = 0.5f + flameLength * 0.5f;
-        flameTransform->position = { shipTransform->position.x - forwardX * behind,
-                                     shipTransform->position.y - forwardY * behind, 0.9f };
+        flameTransform->position = shipTransform->position - forward * behind;
+        flameTransform->position.z = 0.9f;
         flameTransform->rotation = shipTransform->rotation;
         flameTransform->scale = { 0.8f, flameLength, 1.0f };
 
