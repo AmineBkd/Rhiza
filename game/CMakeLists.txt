@@ -1,11 +1,10 @@
 project(Game VERSION 0.1 LANGUAGES CXX)
 
-# Create game executable
 add_executable(${PROJECT_NAME}
     src/main.cpp
 )
+rhiza_enable_warnings(${PROJECT_NAME})
 
-# Link Engine
 # RenderSystem.h includes both, so the game links both. RhizaFramework
 # deliberately does not depend on RhizaEngine itself - that would drag SDL and
 # Ogre into RegistryTests, which is meant to run anywhere.

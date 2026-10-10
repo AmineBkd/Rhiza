@@ -68,7 +68,7 @@ jobs:
         run: ./third_party/vcpkg/bootstrap-vcpkg.sh
 
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }} -DCMAKE_BUILD_TYPE=Release
+        run: cmake --preset ${{ matrix.preset }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
 
       # Saved straight after vcpkg has run, so a later compile or test
       # failure doesn't throw the packages away.

@@ -40,8 +40,7 @@ target_link_libraries(RegistryTests PRIVATE RhizaFramework)
 add_test(NAME RegistryTests COMMAND RegistryTests)
 
 # Path keys, the asset cache's bookkeeping and glTF parsing are pure data
-# too. cgltf is header-only, so the parser compiles straight in like Input
-# and Clock above.
+# too, so the parser compiles straight in like Input and Clock above.
 add_executable(AssetTests AssetTests.cpp
     ${CMAKE_SOURCE_DIR}/engine/src/core/AssetPath.cpp
     ${CMAKE_SOURCE_DIR}/engine/src/core/AssetCache.cpp
@@ -50,8 +49,8 @@ add_executable(AssetTests AssetTests.cpp
 target_include_directories(AssetTests PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/include
     ${CMAKE_SOURCE_DIR}/engine/src
-    ${CGLTF_INCLUDE_DIR}
 )
+target_link_libraries(AssetTests PRIVATE RhizaThirdParty)
 
 add_test(NAME AssetTests COMMAND AssetTests)
 
@@ -60,15 +59,13 @@ add_test(NAME AssetTests COMMAND AssetTests)
 # Vorbis input.
 add_executable(AudioTests AudioTests.cpp
     ${CMAKE_SOURCE_DIR}/engine/src/audio/Audio.cpp
-    ${CMAKE_SOURCE_DIR}/engine/src/audio/MiniaudioImplementation.cpp
     ${CMAKE_SOURCE_DIR}/engine/src/core/AssetCache.cpp
 )
 target_include_directories(AudioTests PRIVATE
     ${CMAKE_SOURCE_DIR}/engine/include
     ${CMAKE_SOURCE_DIR}/engine/src
-    ${MINIAUDIO_INCLUDE_DIR}
-    ${STB_INCLUDE_DIR}
 )
+target_link_libraries(AudioTests PRIVATE RhizaThirdParty)
 target_compile_definitions(AudioTests PRIVATE
     RHIZA_TEST_OGG="${CMAKE_SOURCE_DIR}/game/assets/music.ogg"
 )
@@ -79,3 +76,7 @@ add_executable(MathTests MathTests.cpp ${CMAKE_SOURCE_DIR}/engine/src/core/Math.
 target_include_directories(MathTests PRIVATE ${CMAKE_SOURCE_DIR}/engine/include)
 
 add_test(NAME MathTests COMMAND MathTests)
+
+foreach(test ShapesTests InputTests ClockTests RegistryTests AssetTests AudioTests MathTests)
+    rhiza_enable_warnings(${test})
+endforeach()

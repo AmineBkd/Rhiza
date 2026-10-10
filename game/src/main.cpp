@@ -28,7 +28,7 @@ struct Spin
 
 }  // namespace
 
-int main( int argc, char *argv[] )
+int main()
 {
     Rhiza::Engine engine;
     if( !engine.initialize() )

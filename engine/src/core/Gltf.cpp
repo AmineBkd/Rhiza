@@ -5,7 +5,6 @@
 #include <memory>
 #include <utility>
 
-#define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 
 namespace Rhiza

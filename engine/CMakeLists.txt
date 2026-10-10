@@ -4,6 +4,18 @@ project(RhizaEngine VERSION 0.1 LANGUAGES CXX)
 # platform/, render/ and audio/ never include one another - they meet only
 # through core/ types or plain callbacks wired up in Engine.cpp. SDL appears
 # only under platform/, Ogre only under render/, miniaudio only under audio/.
+# Third-party implementation files we compile ourselves, apart from our own
+# code so they build with warnings off. SYSTEM keeps their headers quiet in
+# every target that links this.
+add_library(RhizaThirdParty STATIC
+    src/audio/MiniaudioImplementation.cpp
+    src/core/CgltfImplementation.cpp
+)
+target_include_directories(RhizaThirdParty SYSTEM PUBLIC
+    ${CGLTF_INCLUDE_DIR} ${MINIAUDIO_INCLUDE_DIR} ${STB_INCLUDE_DIR}
+)
+target_compile_options(RhizaThirdParty PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,-w>)
+
 add_library(${PROJECT_NAME} STATIC
     src/Engine.cpp
 
@@ -20,7 +32,6 @@ add_library(${PROJECT_NAME} STATIC
     src/core/NativeWindowHandle.h
 
     src/audio/Audio.cpp
-    src/audio/MiniaudioImplementation.cpp
     src/audio/Audio.h
     src/audio/Miniaudio.h
 
@@ -54,10 +65,11 @@ add_library(${PROJECT_NAME} STATIC
 
 target_include_directories(${PROJECT_NAME}
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CGLTF_INCLUDE_DIR} ${MINIAUDIO_INCLUDE_DIR} ${STB_INCLUDE_DIR}
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 OgreNext::OgreNext)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 OgreNext::OgreNext RhizaThirdParty)
+rhiza_enable_warnings(${PROJECT_NAME})
 
 # Consumed by render/Renderer.cpp: where this engine's own copy of the Hlms
 # shader templates lives, and the vcpkg triplet install root holding the
