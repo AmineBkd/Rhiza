@@ -29,12 +29,14 @@ class Item;
 class Light;
 class HlmsDatablock;
 class TextureGpu;
+class LogManager;
 }  // namespace Ogre
 
 namespace Rhiza
 {
 
 class DeviceLossListener;
+class OgreLogForwarder;
 
 // Owns every Ogre-Next object. Knows nothing about SDL; Window.h must never
 // be included here.
@@ -87,9 +89,6 @@ public:
     uint32_t acquireCachedMesh( const std::string &cacheKey );
     uint32_t acquireCachedTexture( const std::string &cacheKey, const TextureDesc &desc );
 
-    void reportError( const std::string &message );
-    void reportWarning( const std::string &message );
-
     uint32_t createMaterial( const MaterialDesc &desc );
 
     uint32_t createInstance( uint32_t meshHandle, uint32_t materialHandle );
@@ -108,6 +107,7 @@ private:
     // Split out so one try/catch at the call site covers every Ogre call in
     // the startup sequence.
     bool initializeInternal( const NativeWindowHandle &windowHandle, const EngineSettings &settings );
+    void shutdownOgre();
 
     // Both implementations are always registered, even if a project uses
     // only one: they are how Rhiza expresses 3D (Pbs) and 2D (Unlit), and a
@@ -165,6 +165,8 @@ private:
         Ogre::Light *light = nullptr;
     };
 
+    Ogre::LogManager *mLogManager = nullptr;
+    std::unique_ptr<OgreLogForwarder> mOgreLogForwarder;
     Ogre::Root *mRoot = nullptr;
     Ogre::SceneManager *mSceneManager = nullptr;
     Ogre::Camera *mCamera = nullptr;

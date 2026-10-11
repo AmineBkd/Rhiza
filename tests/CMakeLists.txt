@@ -14,7 +14,7 @@ function(rhiza_add_tests target)
     catch_discover_tests(${target} EXTRA_ARGS --skip-benchmarks DISCOVERY_MODE PRE_TEST)
 endfunction()
 
-rhiza_add_tests(RhizaCoreTests ShapesTests.cpp ClockTests.cpp MathTests.cpp AssetTests.cpp)
+rhiza_add_tests(RhizaCoreTests ShapesTests.cpp ClockTests.cpp MathTests.cpp AssetTests.cpp LogTests.cpp)
 target_link_libraries(RhizaCoreTests PRIVATE RhizaCore)
 
 rhiza_add_tests(RhizaPlatformTests InputTests.cpp)

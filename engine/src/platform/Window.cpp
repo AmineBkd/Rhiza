@@ -1,4 +1,7 @@
 #include "Window.h"
+
+#include <Rhiza/Log.h>
+
 #include <SDL3/SDL.h>
 
 namespace Rhiza
@@ -91,7 +94,7 @@ bool Window::initialize( const std::string &title, int width, int height )
 
     if( !SDL_InitSubSystem( SDL_INIT_VIDEO ) )
     {
-        SDL_Log( "SDL video unavailable: %s", SDL_GetError() );
+        logError( "platform", std::string( "SDL video unavailable: " ) + SDL_GetError() );
         return false;
     }
 
@@ -100,7 +103,7 @@ bool Window::initialize( const std::string &title, int width, int height )
     mWindow = SDL_CreateWindow( title.c_str(), width, height, 0 );
     if( !mWindow )
     {
-        SDL_Log( "SDL_CreateWindow failed: %s", SDL_GetError() );
+        logError( "platform", std::string( "SDL_CreateWindow failed: " ) + SDL_GetError() );
         SDL_QuitSubSystem( SDL_INIT_VIDEO );
         return false;
     }

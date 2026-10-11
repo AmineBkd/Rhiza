@@ -8,6 +8,11 @@ namespace Rhiza
 struct EngineSettings
 {
     const char *windowTitle = "Rhiza";
+
+    // Name the per-user writable folder that holds Rhiza.log - on Windows,
+    // %APPDATA%/organization/application.
+    const char *organization = "Rhiza";
+    const char *application = "Game";
     int windowWidth = 1280;
     int windowHeight = 720;
 

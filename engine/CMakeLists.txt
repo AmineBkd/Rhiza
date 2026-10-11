@@ -24,10 +24,12 @@ add_library(RhizaCore STATIC
     src/core/AssetPath.cpp
     src/core/AssetCache.cpp
     src/core/Gltf.cpp
+    src/core/Log.cpp
     src/core/Clock.h
     src/core/AssetPath.h
     src/core/AssetCache.h
     src/core/Gltf.h
+    src/core/LogSinks.h
     src/core/NativeWindowHandle.h
 
     include/Rhiza/Types/Audio.h
@@ -41,6 +43,7 @@ add_library(RhizaCore STATIC
     include/Rhiza/Types/Mesh.h
     include/Rhiza/Types/Texture.h
     include/Rhiza/Shapes.h
+    include/Rhiza/Log.h
 )
 target_include_directories(RhizaCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -55,11 +58,13 @@ add_library(RhizaPlatform STATIC
     src/platform/FileSystem.cpp
     src/platform/AudioOutput.cpp
     src/platform/PlatformLifetime.cpp
+    src/platform/LogOutputs.cpp
     src/platform/Window.h
     src/platform/Input.h
     src/platform/FileSystem.h
     src/platform/AudioOutput.h
     src/platform/PlatformLifetime.h
+    src/platform/LogOutputs.h
 )
 target_link_libraries(RhizaPlatform PUBLIC RhizaCore PRIVATE SDL3::SDL3)
 rhiza_enable_warnings(RhizaPlatform)

@@ -1,6 +1,10 @@
 #include "AudioOutput.h"
 
+#include <Rhiza/Log.h>
+
 #include <SDL3/SDL.h>
+
+#include <string>
 
 namespace Rhiza
 {
@@ -24,7 +28,7 @@ bool AudioOutput::start( int sampleRate, int channels, FillFunction fill )
 {
     if( !SDL_InitSubSystem( SDL_INIT_AUDIO ) )
     {
-        SDL_Log( "audio unavailable: %s", SDL_GetError() );
+        logWarning( "audio", std::string( "audio unavailable: " ) + SDL_GetError() );
         return false;
     }
     mAudioSubsystemStarted = true;
@@ -35,7 +39,7 @@ bool AudioOutput::start( int sampleRate, int channels, FillFunction fill )
     mStream = SDL_OpenAudioDeviceStream( SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, &onAudioWanted, this );
     if( !mStream )
     {
-        SDL_Log( "no audio output device: %s", SDL_GetError() );
+        logWarning( "audio", std::string( "no audio output device: " ) + SDL_GetError() );
         stop();
         return false;
     }

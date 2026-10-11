@@ -1,5 +1,7 @@
 #include "Renderer.h"
 
+#include <Rhiza/Log.h>
+
 #include "core/AssetPath.h"
 
 #include <cstdio>
@@ -303,21 +305,6 @@ void replaceGeometry( Ogre::SubMesh &subMesh, const MeshDesc &desc, Ogre::VaoMan
     subMesh.mVao[Ogre::VpShadow][0] = newVao;
 }
 
-// Ogre's log is the one place these messages are useful, but it only exists
-// once Root has been constructed - and initialize() can fail before that.
-void logMessage( const std::string &message, Ogre::LogMessageLevel level )
-{
-    if( Ogre::LogManager::getSingletonPtr() )
-        Ogre::LogManager::getSingleton().logMessage( "[Rhiza] " + message, level );
-    else
-        fprintf( stderr, "[Rhiza] %s\n", message.c_str() );
-}
-
-void logError( const std::string &message )
-{
-    logMessage( message, Ogre::LML_CRITICAL );
-}
-
 Ogre::Vector3 toOgre( const Vec3 &v )
 {
     return Ogre::Vector3( v.x, v.y, v.z );
@@ -377,6 +364,22 @@ private:
     bool &mDeviceLost;
 };
 
+// Ogre's messages join Rhiza's log: its routine output as Debug, its errors as
+// errors.
+class OgreLogForwarder final : public Ogre::LogListener
+{
+public:
+    void messageLogged( const Ogre::String &message, Ogre::LogMessageLevel level, bool, const Ogre::String &,
+                        bool &skipThisMessage ) override
+    {
+        if( level == Ogre::LML_CRITICAL )
+            logError( "ogre", message );
+        else
+            logDebug( "ogre", message );
+        skipThisMessage = true;
+    }
+};
+
 Renderer::Renderer() = default;
 
 Renderer::~Renderer()
@@ -394,7 +397,7 @@ bool Renderer::initialize( const NativeWindowHandle &windowHandle, const EngineS
     }
     catch( Ogre::Exception &e )
     {
-        logError( "renderer initialization failed: " + e.getDescription() );
+        logError( "render", "renderer initialization failed: " + e.getDescription() );
         return false;
     }
 }
@@ -404,15 +407,20 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
 {
     const std::string title = settings.windowTitle;
 
+    // Created before Root, so Root adopts it instead of opening a log file.
+    mLogManager = OGRE_NEW Ogre::LogManager();
+    mOgreLogForwarder = std::make_unique<OgreLogForwarder>();
+    mLogManager->createLog( "Ogre", true, false, true )->addListener( mOgreLogForwarder.get() );
+
     const Ogre::AbiCookie abiCookie = Ogre::generateAbiCookie();
-    mRoot = OGRE_NEW Ogre::Root( &abiCookie, Ogre::BLANKSTRING, Ogre::BLANKSTRING, "Rhiza.log", title );
+    mRoot = OGRE_NEW Ogre::Root( &abiCookie, Ogre::BLANKSTRING, Ogre::BLANKSTRING, Ogre::BLANKSTRING, title );
 
     mRoot->loadPlugin( getRenderSystemPluginPath(), false, nullptr );
 
     Ogre::RenderSystem *renderSystem = mRoot->getRenderSystemByName( kRenderSystemName );
     if( !renderSystem )
     {
-        logError( std::string( "render system '" ) + kRenderSystemName +
+        logError( "render", std::string( "render system '" ) + kRenderSystemName +
                   "' was not found after loading " + getRenderSystemPluginPath() );
         return false;
     }
@@ -502,9 +510,16 @@ void Renderer::registerHlms()
 
 void Renderer::shutdown()
 {
-    if( !mRoot )
-        return;
+    if( mRoot )
+        shutdownOgre();
 
+    OGRE_DELETE mLogManager;
+    mLogManager = nullptr;
+    mOgreLogForwarder.reset();
+}
+
+void Renderer::shutdownOgre()
+{
     // ~Root tears down the scene manager and everything in it, so these
     // only need forgetting, not individually destroying.
     mMeshAssets.clear();
@@ -550,13 +565,13 @@ void Renderer::renderOneFrame()
         // The frame is left half-drawn and Ogre can't say which material
         // broke it. Vulkan's device loss also arrives here, with
         // VK_ERROR_DEVICE_LOST in getNumber() - route it once Vulkan is wired.
-        logError( "rendering failed: " + e.getDescription() );
+        logError( "render", "rendering failed: " + e.getDescription() );
         if( !mDeviceLost )
             mRenderFailed = true;
     }
 
     if( mDeviceLost )
-        logError( "GPU device lost; rendering stopped" );
+        logError( "render", "GPU device lost; rendering stopped" );
 }
 
 uint32_t Renderer::createMeshAsset( const MeshDesc &desc, const std::string &cacheKey )
@@ -564,7 +579,7 @@ uint32_t Renderer::createMeshAsset( const MeshDesc &desc, const std::string &cac
     const std::string problem = findMeshProblem( desc );
     if( !problem.empty() )
     {
-        logError( "createMeshAsset rejected a mesh because " + problem );
+        logError( "render", "createMeshAsset rejected a mesh because " + problem );
         return 0;
     }
 
@@ -579,7 +594,7 @@ uint32_t Renderer::createMeshAsset( const MeshDesc &desc, const std::string &cac
     }
     catch( Ogre::Exception &e )
     {
-        logError( "createMeshAsset could not allocate GPU buffers: " + e.getDescription() );
+        logError( "render", "createMeshAsset could not allocate GPU buffers: " + e.getDescription() );
         return 0;
     }
 
@@ -596,7 +611,7 @@ uint32_t Renderer::createMeshAsset( const MeshDesc &desc, const std::string &cac
     catch( Ogre::Exception &e )
     {
         destroyVao( vao, vaoManager );
-        logError( "createMeshAsset could not register '" + meshName + "': " + e.getDescription() );
+        logError( "render", "createMeshAsset could not register '" + meshName + "': " + e.getDescription() );
         return 0;
     }
     Ogre::SubMesh *subMesh = mesh->createSubMesh();
@@ -637,7 +652,7 @@ void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
         }
         catch( Ogre::Exception &e )
         {
-            logError( "updateMesh could not allocate GPU buffers for '" + asset->name +
+            logError( "render", "updateMesh could not allocate GPU buffers for '" + asset->name +
                       "': " + e.getDescription() );
             return;
         }
@@ -652,14 +667,14 @@ const Renderer::MeshAsset *Renderer::findUpdatableMesh( uint32_t handle, const M
     auto it = mMeshAssets.find( handle );
     if( it == mMeshAssets.end() )
     {
-        logError( "updateMesh given a mesh handle that does not exist" );
+        logError( "render", "updateMesh given a mesh handle that does not exist" );
         return nullptr;
     }
 
     const MeshAsset &asset = it->second;
     if( !asset.isMutable )
     {
-        logError( "updateMesh called on '" + asset.name +
+        logError( "render", "updateMesh called on '" + asset.name +
                   "', which was not created with MeshDesc::isMutable" );
         return nullptr;
     }
@@ -667,7 +682,7 @@ const Renderer::MeshAsset *Renderer::findUpdatableMesh( uint32_t handle, const M
     const std::string problem = findMeshProblem( desc );
     if( !problem.empty() )
     {
-        logError( "updateMesh rejected new geometry for '" + asset.name + "' because " + problem );
+        logError( "render", "updateMesh rejected new geometry for '" + asset.name + "' because " + problem );
         return nullptr;
     }
 
@@ -699,7 +714,7 @@ void Renderer::destroyMeshAsset( uint32_t handle )
     const MeshAsset &asset = it->second;
     if( asset.instanceRefCount != 0 )
     {
-        logError( "destroyMeshAsset refused: '" + asset.name + "' still has " +
+        logError( "render", "destroyMeshAsset refused: '" + asset.name + "' still has " +
                   std::to_string( asset.instanceRefCount ) + " instance(s) referencing it" );
         return;
     }
@@ -722,16 +737,6 @@ uint32_t Renderer::acquireCachedTexture( const std::string &cacheKey, const Text
     return mTextureCache.acquire( textureCacheKey( cacheKey, desc ) );
 }
 
-void Renderer::reportError( const std::string &message )
-{
-    logError( message );
-}
-
-void Renderer::reportWarning( const std::string &message )
-{
-    logMessage( "warning: " + message, Ogre::LML_NORMAL );
-}
-
 uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std::string &cacheKey,
                                   const TextureDesc &desc )
 {
@@ -746,7 +751,7 @@ uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std
     catch( Ogre::Exception &e )
     {
         delete image;
-        logError( "could not decode texture '" + cacheKey + "': " + e.getDescription() );
+        logError( "render", "could not decode texture '" + cacheKey + "': " + e.getDescription() );
         return 0;
     }
 
@@ -767,7 +772,7 @@ uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std
     catch( Ogre::Exception &e )
     {
         delete image;
-        logError( "could not create texture '" + alias + "': " + e.getDescription() );
+        logError( "render", "could not create texture '" + alias + "': " + e.getDescription() );
         return 0;
     }
     texture->scheduleTransitionTo( Ogre::GpuResidency::Resident, image );
@@ -794,7 +799,7 @@ void Renderer::destroyTexture( uint32_t handle )
     const TextureAsset &asset = it->second;
     if( asset.materialRefCount != 0 )
     {
-        logError( "destroyTexture refused: '" + asset.texture->getNameStr() + "' still has " +
+        logError( "render", "destroyTexture refused: '" + asset.texture->getNameStr() + "' still has " +
                   std::to_string( asset.materialRefCount ) + " material(s) referencing it" );
         return;
     }
@@ -810,7 +815,7 @@ void Renderer::destroyTexture( uint32_t handle )
     }
     catch( Ogre::Exception &e )
     {
-        logError( "destroyTexture failed: " + e.getDescription() );
+        logError( "render", "destroyTexture failed: " + e.getDescription() );
     }
     mTextureCache.forget( handle );
     mTextures.erase( it );
@@ -824,7 +829,7 @@ uint32_t Renderer::createMaterial( const MaterialDesc &desc )
         auto textureIt = mTextures.find( desc.texture.id );
         if( textureIt == mTextures.end() )
         {
-            logError( "createMaterial given a texture handle that does not exist" );
+            logError( "render", "createMaterial given a texture handle that does not exist" );
             return 0;
         }
         texture = &textureIt->second;
@@ -840,7 +845,7 @@ uint32_t Renderer::createMaterial( const MaterialDesc &desc )
     }
     catch( Ogre::Exception &e )
     {
-        logError( "createMaterial failed: " + e.getDescription() );
+        logError( "render", "createMaterial failed: " + e.getDescription() );
         return 0;
     }
     asset.textureHandle = desc.texture.id;
@@ -860,7 +865,7 @@ void Renderer::destroyMaterial( uint32_t handle )
 
     if( it->second.instanceRefCount != 0 )
     {
-        logError( "destroyMaterial refused: still has " +
+        logError( "render", "destroyMaterial refused: still has " +
                   std::to_string( it->second.instanceRefCount ) + " instance(s) referencing it" );
         return;
     }
@@ -872,7 +877,7 @@ void Renderer::destroyMaterial( uint32_t handle )
     }
     catch( Ogre::Exception &e )
     {
-        logError( "destroyMaterial failed: " + e.getDescription() );
+        logError( "render", "destroyMaterial failed: " + e.getDescription() );
     }
 
     auto textureIt = mTextures.find( it->second.textureHandle );
@@ -887,13 +892,13 @@ uint32_t Renderer::createInstance( uint32_t meshHandle, uint32_t materialHandle 
     auto meshIt = mMeshAssets.find( meshHandle );
     if( meshIt == mMeshAssets.end() )
     {
-        logError( "createInstance given a mesh handle that does not exist" );
+        logError( "render", "createInstance given a mesh handle that does not exist" );
         return 0;
     }
     auto materialIt = mMaterials.find( materialHandle );
     if( materialIt == mMaterials.end() )
     {
-        logError( "createInstance given a material handle that does not exist" );
+        logError( "render", "createInstance given a material handle that does not exist" );
         return 0;
     }
 
@@ -917,7 +922,7 @@ uint32_t Renderer::createInstance( uint32_t meshHandle, uint32_t materialHandle 
             mSceneManager->destroyItem( item );
         if( sceneNode )
             mSceneManager->destroySceneNode( sceneNode );
-        logError( "createInstance failed: " + e.getDescription() );
+        logError( "render", "createInstance failed: " + e.getDescription() );
         return 0;
     }
 
@@ -950,7 +955,7 @@ void Renderer::destroyInstance( uint32_t handle )
     }
     catch( Ogre::Exception &e )
     {
-        logError( "destroyInstance failed: " + e.getDescription() );
+        logError( "render", "destroyInstance failed: " + e.getDescription() );
     }
 
     auto meshIt = mMeshAssets.find( instance.meshAssetHandle );
@@ -1054,7 +1059,7 @@ uint32_t Renderer::createLight( const LightDesc &desc )
             mSceneManager->destroyLight( light );
         if( node )
             mSceneManager->destroySceneNode( node );
-        logError( "createLight failed: " + e.getDescription() );
+        logError( "render", "createLight failed: " + e.getDescription() );
         return 0;
     }
 
@@ -1095,7 +1100,7 @@ void Renderer::destroyLight( uint32_t handle )
     }
     catch( Ogre::Exception &e )
     {
-        logError( "destroyLight failed: " + e.getDescription() );
+        logError( "render", "destroyLight failed: " + e.getDescription() );
     }
     mLights.erase( it );
 }
@@ -1119,7 +1124,7 @@ void Renderer::setCamera( const CameraDesc &camera )
     // Ogre throws on this one, after the other settings would have applied.
     if( !( camera.nearClip > 0.0f ) )
     {
-        logError( "setCamera rejected a near clip distance that is not above zero" );
+        logError( "render", "setCamera rejected a near clip distance that is not above zero" );
         return;
     }
 

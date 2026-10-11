@@ -1,5 +1,7 @@
 #include "FileSystem.h"
 
+#include <Rhiza/Log.h>
+
 #include <SDL3/SDL.h>
 
 namespace Rhiza
@@ -11,7 +13,7 @@ bool readFile( const std::string &path, std::vector<uint8_t> &out )
     void *data = SDL_LoadFile( path.c_str(), &size );
     if( !data )
     {
-        SDL_Log( "could not read '%s': %s", path.c_str(), SDL_GetError() );
+        logError( "assets", "could not read '" + path + "': " + SDL_GetError() );
         return false;
     }
 

@@ -1,4 +1,5 @@
 #include <Rhiza/Engine.h>
+#include <Rhiza/Log.h>
 
 #include <algorithm>
 
@@ -9,6 +10,7 @@
 #include "platform/AudioOutput.h"
 #include "platform/FileSystem.h"
 #include "platform/Input.h"
+#include "platform/LogOutputs.h"
 #include "platform/PlatformLifetime.h"
 #include "render/Renderer.h"
 #include "platform/Window.h"
@@ -18,6 +20,7 @@ namespace Rhiza
     struct Engine::Impl
     {
         PlatformLifetime platform;  // first, so it is destroyed last
+        LogOutputs logOutputs;      // outlives everything that logs
         Window window;
         Renderer renderer;
         Input input;
@@ -34,7 +37,7 @@ namespace Rhiza
         {
             const std::string spelledOnDisk = findCaseMismatch( assetRoot, cacheKey );
             if( !spelledOnDisk.empty() )
-                renderer.reportWarning( "asset '" + cacheKey + "' is spelled '" + spelledOnDisk +
+                logWarning( "assets", "asset '" + cacheKey + "' is spelled '" + spelledOnDisk +
                                         "' on disk. It loads here, but asset paths are "
                                         "case-sensitive, so it will fail on Linux and Android." );
         }
@@ -65,7 +68,7 @@ namespace Rhiza
             std::string error;
             handle.id = audio.createSound( bytes, cacheKey, maxCopies, error );
             if( !handle.isValid() )
-                renderer.reportError( "loadSound rejected '" + cacheKey + "' because " + error );
+                logError( "audio", "loadSound rejected '" + cacheKey + "' because " + error );
             return handle;
         }
 
@@ -99,6 +102,7 @@ namespace Rhiza
     bool Engine::initialize( const EngineSettings &settings )
     {
         mImpl = std::make_unique<Impl>();
+        mImpl->logOutputs.attach( settings.organization, settings.application );
 
         if( !mImpl->window.initialize( settings.windowTitle, settings.windowWidth, settings.windowHeight ) )
         {
@@ -135,7 +139,7 @@ namespace Rhiza
             // With no device pulling the mix, voices would never finish and
             // fill every slot.
             audio->shutdown();
-            mImpl->renderer.reportWarning( "audio could not start; the game will run silent" );
+            logWarning( "audio", "audio could not start; the game will run silent" );
         }
 
         mImpl->running = true;
@@ -239,7 +243,7 @@ namespace Rhiza
         std::string error;
         if( !parseGltfMesh( bytes, fullPath, readFile, desc, error ) )
         {
-            mImpl->renderer.reportError( "loadMesh rejected '" + cacheKey + "' because " + error );
+            logError( "assets", "loadMesh rejected '" + cacheKey + "' because " + error );
             return handle;
         }
 
@@ -399,7 +403,7 @@ namespace Rhiza
             return;
         std::string error;
         if( !mImpl->audio.playMusic( std::move( bytes ), fadeSeconds, error ) )
-            mImpl->renderer.reportError( "playMusic rejected '" + cacheKey + "' because " + error );
+            logError( "audio", "playMusic rejected '" + cacheKey + "' because " + error );
     }
 
     void Engine::stopMusic( float fadeSeconds )
