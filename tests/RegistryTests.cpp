@@ -6,29 +6,17 @@
 // swap-and-pop corrupting an unrelated entity's component on removal, and a
 // stale handle aliasing onto whatever now occupies its recycled slot. Both
 // would show up as "the wrong entity's data" bugs far from this file.
-//
-// Deliberately dependency-free rather than pulling in a test framework;
-// there is not yet enough here to justify one.
+
+#include <catch2/benchmark/catch_benchmark.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <Rhiza/Registry.h>
 
-#include <cstdio>
 #include <string>
 #include <vector>
 
 namespace
 {
-
-int gFailures = 0;
-
-void check( bool condition, const std::string &what )
-{
-    if( !condition )
-    {
-        std::printf( "  FAIL: %s\n", what.c_str() );
-        ++gFailures;
-    }
-}
 
 struct Position
 {
@@ -42,32 +30,30 @@ struct Velocity
     float dy = 0.0f;
 };
 
-void testCreateAndDestroy()
+TEST_CASE( "Registry: create and destroy" )
 {
-    std::printf( "create and destroy:\n" );
     Rhiza::Registry registry;
 
     Rhiza::Entity a = registry.createEntity();
     Rhiza::Entity b = registry.createEntity();
 
-    check( a.isValid(), "a is valid" );
-    check( b.isValid(), "b is valid" );
-    check( a != b, "two createEntity() calls return different entities" );
-    check( registry.isAlive( a ), "a is alive after creation" );
-    check( registry.isAlive( b ), "b is alive after creation" );
+    CHECK( a.isValid() );
+    CHECK( b.isValid() );
+    CHECK( a != b );
+    CHECK( registry.isAlive( a ) );
+    CHECK( registry.isAlive( b ) );
 
     registry.destroyEntity( a );
-    check( !registry.isAlive( a ), "a is not alive after destroyEntity" );
-    check( registry.isAlive( b ), "destroying a does not affect b" );
+    CHECK( !registry.isAlive( a ) );
+    CHECK( registry.isAlive( b ) );
 
     // Double-destroy must not crash or affect anything else.
     registry.destroyEntity( a );
-    check( registry.isAlive( b ), "double-destroying a still leaves b alive" );
+    CHECK( registry.isAlive( b ) );
 }
 
-void testStaleHandleAfterRecycle()
+TEST_CASE( "Registry: stale handle after slot recycling" )
 {
-    std::printf( "stale handle after slot recycling:\n" );
     Rhiza::Registry registry;
 
     Rhiza::Entity original = registry.createEntity();
@@ -78,49 +64,46 @@ void testStaleHandleAfterRecycle()
     // available - createEntity() must reuse original.index, but with a
     // bumped generation.
     Rhiza::Entity recycled = registry.createEntity();
-    check( recycled.index == original.index, "the freed index is reused" );
-    check( recycled.generation != original.generation, "the reused slot's generation is bumped" );
-    check( !registry.isAlive( original ), "the stale (pre-destroy) handle reads as not alive" );
-    check( registry.isAlive( recycled ), "the new handle to the same index reads as alive" );
+    CHECK( recycled.index == original.index );
+    CHECK( recycled.generation != original.generation );
+    CHECK( !registry.isAlive( original ) );
+    CHECK( registry.isAlive( recycled ) );
 
     // The sharpest version of the bug class this exists to catch: the old
     // handle must not read the new occupant's component just because they
     // share an index.
     registry.addComponent( recycled, Position{ 9.0f, 9.0f } );
-    check( registry.getComponent<Position>( original ) == nullptr,
-           "a stale handle cannot read the recycled slot's new component" );
-    check( registry.getComponent<Position>( recycled ) != nullptr,
-           "the live handle can read its own component" );
+    CHECK( registry.getComponent<Position>( original ) == nullptr );
+    CHECK( registry.getComponent<Position>( recycled ) != nullptr );
 }
 
-void testComponents()
+TEST_CASE( "Registry: add/get/has/remove component" )
 {
-    std::printf( "add/get/has/remove component:\n" );
     Rhiza::Registry registry;
     Rhiza::Entity e = registry.createEntity();
 
-    check( !registry.hasComponent<Position>( e ), "no Position before it's added" );
-    check( registry.getComponent<Position>( e ) == nullptr, "getComponent returns null before it's added" );
+    CHECK( !registry.hasComponent<Position>( e ) );
+    CHECK( registry.getComponent<Position>( e ) == nullptr );
 
     registry.addComponent( e, Position{ 3.0f, 4.0f } );
-    check( registry.hasComponent<Position>( e ), "hasComponent true after addComponent" );
+    CHECK( registry.hasComponent<Position>( e ) );
 
     Position *p = registry.getComponent<Position>( e );
-    check( p != nullptr, "getComponent non-null after addComponent" );
+    CHECK( p != nullptr );
     if( p )
-        check( p->x == 3.0f && p->y == 4.0f, "getComponent returns the value that was added" );
+        CHECK( p->x == 3.0f );
+        CHECK( p->y == 4.0f );
 
     registry.removeComponent<Position>( e );
-    check( !registry.hasComponent<Position>( e ), "hasComponent false after removeComponent" );
-    check( registry.getComponent<Position>( e ) == nullptr, "getComponent null after removeComponent" );
+    CHECK( !registry.hasComponent<Position>( e ) );
+    CHECK( registry.getComponent<Position>( e ) == nullptr );
 
     // Removing a component an entity never had must be a harmless no-op.
     registry.removeComponent<Velocity>( e );
 }
 
-void testSwapAndPopDoesNotCorruptOtherEntities()
+TEST_CASE( "Registry: swap-and-pop leaves other entities intact" )
 {
-    std::printf( "swap-and-pop leaves other entities intact:\n" );
     Rhiza::Registry registry;
 
     Rhiza::Entity a = registry.createEntity();
@@ -135,16 +118,17 @@ void testSwapAndPopDoesNotCorruptOtherEntities()
     // data if the sparse-array bookkeeping isn't patched correctly.
     registry.removeComponent<Position>( b );
 
-    check( !registry.hasComponent<Position>( b ), "b's component is gone" );
+    CHECK( !registry.hasComponent<Position>( b ) );
     Position *pa = registry.getComponent<Position>( a );
     Position *pc = registry.getComponent<Position>( c );
-    check( pa != nullptr && pa->x == 1.0f, "a's component is untouched by removing b" );
-    check( pc != nullptr && pc->x == 3.0f, "c's component survives the swap-and-pop with its own value" );
+    REQUIRE( pa != nullptr );
+    CHECK( pa->x == 1.0f );
+    REQUIRE( pc != nullptr );
+    CHECK( pc->x == 3.0f );
 }
 
-void testDestroyEntityClearsEveryComponentType()
+TEST_CASE( "Registry: destroyEntity clears every component pool" )
 {
-    std::printf( "destroyEntity clears every component pool:\n" );
     Rhiza::Registry registry;
 
     Rhiza::Entity e = registry.createEntity();
@@ -155,15 +139,15 @@ void testDestroyEntityClearsEveryComponentType()
 
     registry.destroyEntity( e );
 
-    check( !registry.hasComponent<Position>( e ), "Position gone after destroyEntity" );
-    check( !registry.hasComponent<Velocity>( e ), "Velocity gone after destroyEntity" );
+    CHECK( !registry.hasComponent<Position>( e ) );
+    CHECK( !registry.hasComponent<Velocity>( e ) );
     Position *po = registry.getComponent<Position>( other );
-    check( po != nullptr && po->x == 7.0f, "an unrelated entity's component survives" );
+    REQUIRE( po != nullptr );
+    CHECK( po->x == 7.0f );
 }
 
-void testView()
+TEST_CASE( "Registry: view iterates exactly the right entities" )
 {
-    std::printf( "view iterates exactly the right entities:\n" );
     Rhiza::Registry registry;
 
     Rhiza::Entity a = registry.createEntity();
@@ -171,7 +155,7 @@ void testView()
     Rhiza::Entity c = registry.createEntity();
     registry.addComponent( a, Position{ 1.0f, 0.0f } );
     registry.addComponent( c, Position{ 3.0f, 0.0f } );
-    check( !registry.hasComponent<Position>( b ), "b deliberately has no Position" );
+    CHECK( !registry.hasComponent<Position>( b ) );
 
     int count = 0;
     float sumX = 0.0f;
@@ -179,21 +163,21 @@ void testView()
     {
         ++count;
         sumX += position.x;
-        check( entity == a || entity == c, "view only yields entities that actually have Position" );
+        CHECK( ( entity == a || entity == c ) );
     }
-    check( count == 2, "view visits exactly the two entities with Position" );
-    check( sumX == 4.0f, "view exposes mutable references to the real component values" );
+    CHECK( count == 2 );
+    CHECK( sumX == 4.0f );
 
     // Mutate through the view and confirm it stuck.
     for( auto [entity, position] : registry.view<Position>() )
         position.x += 10.0f;
     Position *pa = registry.getComponent<Position>( a );
-    check( pa != nullptr && pa->x == 11.0f, "mutating through a view is visible afterward" );
+    REQUIRE( pa != nullptr );
+    CHECK( pa->x == 11.0f );
 }
 
-void testPairView()
+TEST_CASE( "Registry: view<A, B> yields only entities holding both" )
 {
-    std::printf( "view<A, B> yields only entities holding both:\n" );
     Rhiza::Registry registry;
 
     const Rhiza::Entity both = registry.createEntity();
@@ -215,14 +199,16 @@ void testPairView()
         position.x += velocity.dx;
     }
 
-    check( visited == 1, "pair view yields only entities holding both" );
-    check( seen == both, "pair view yields the entity holding both" );
+    CHECK( visited == 1 );
+    CHECK( seen == both );
 
     const Position *p = registry.getComponent<Position>( both );
-    check( p != nullptr && p->x == 4.0f, "mutating through a pair view is visible afterward" );
+    REQUIRE( p != nullptr );
+    CHECK( p->x == 4.0f );
 
     const Position *untouched = registry.getComponent<Position>( positionOnly );
-    check( untouched != nullptr && untouched->x == 9.0f, "pair view skips half-matching entities" );
+    REQUIRE( untouched != nullptr );
+    CHECK( untouched->x == 9.0f );
 
     // The entity holding only Velocity sits earlier in Velocity's dense array
     // than `both` does, so iterating Velocity first exercises skipToMatch
@@ -235,7 +221,7 @@ void testPairView()
         (void)velocity;
         (void)position;
     }
-    check( reversed == 1, "pair view is symmetric in which type comes first" );
+    CHECK( reversed == 1 );
 
     registry.destroyEntity( both );
     int afterDestroy = 0;
@@ -246,12 +232,11 @@ void testPairView()
         (void)position;
         (void)velocity;
     }
-    check( afterDestroy == 0, "pair view is empty once the only match is destroyed" );
+    CHECK( afterDestroy == 0 );
 }
 
-void testAddingTwiceReplaces()
+TEST_CASE( "Registry: adding a component the entity already has replaces it" )
 {
-    std::printf( "adding a component the entity already has replaces it:\n" );
     Rhiza::Registry registry;
 
     const Rhiza::Entity e = registry.createEntity();
@@ -259,7 +244,8 @@ void testAddingTwiceReplaces()
     registry.addComponent( e, Position{ 2.0f, 2.0f } );
 
     const Position *p = registry.getComponent<Position>( e );
-    check( p != nullptr && p->x == 2.0f, "second add overwrites the first" );
+    REQUIRE( p != nullptr );
+    CHECK( p->x == 2.0f );
 
     int visited = 0;
     for( auto [entity, position] : registry.view<Position>() )
@@ -268,7 +254,7 @@ void testAddingTwiceReplaces()
         (void)entity;
         (void)position;
     }
-    check( visited == 1, "view visits the entity once, not once per add" );
+    CHECK( visited == 1 );
 
     registry.removeComponent<Position>( e );
     int afterRemove = 0;
@@ -278,12 +264,11 @@ void testAddingTwiceReplaces()
         (void)entity;
         (void)position;
     }
-    check( afterRemove == 0, "nothing left to visit after removing it" );
+    CHECK( afterRemove == 0 );
 }
 
-void testOnRemove()
+TEST_CASE( "Registry: onRemove runs whenever a component leaves" )
 {
-    std::printf( "onRemove runs whenever a component leaves:\n" );
     Rhiza::Registry registry;
 
     std::vector<float> removed;
@@ -298,41 +283,47 @@ void testOnRemove()
     registry.addComponent( c, Velocity{ 9.0f, 9.0f } );
 
     registry.removeComponent<Position>( a );
-    check( removed.size() == 1 && removed[0] == 1.0f, "fires on removeComponent with its data" );
+    REQUIRE( removed.size() == 1 );
+    CHECK( removed[0] == 1.0f );
 
     registry.addComponent( b, Position{ 20.0f, 0.0f } );
-    check( removed.size() == 2 && removed[1] == 2.0f, "fires on replace with the old data" );
+    REQUIRE( removed.size() == 2 );
+    CHECK( removed[1] == 2.0f );
 
     registry.destroyEntity( c );
-    check( removed.size() == 3 && removed[2] == 3.0f, "fires on destroyEntity, once" );
+    REQUIRE( removed.size() == 3 );
+    CHECK( removed[2] == 3.0f );
 
     registry.removeComponent<Position>( a );
-    check( removed.size() == 3, "does not fire for a component already gone" );
+    CHECK( removed.size() == 3 );
 
     const Position *survivor = registry.getComponent<Position>( b );
-    check( survivor != nullptr && survivor->x == 20.0f, "swap-and-pop still intact after hooks" );
+    REQUIRE( survivor != nullptr );
+    CHECK( survivor->x == 20.0f );
+}
+
+// Hidden from ctest; run with: RhizaFrameworkTests [benchmark]
+TEST_CASE( "Registry: view benchmark", "[.benchmark]" )
+{
+    Rhiza::Registry registry;
+    for( int i = 0; i < 10000; ++i )
+    {
+        const Rhiza::Entity e = registry.createEntity();
+        registry.addComponent( e, Position{} );
+        if( i % 2 == 0 )
+            registry.addComponent( e, Velocity{ 1.0f, 1.0f } );
+    }
+
+    BENCHMARK( "view<Position, Velocity>, 10k entities, half matching" )
+    {
+        float sum = 0.0f;
+        for( auto [entity, position, velocity] : registry.view<Position, Velocity>() )
+        {
+            position.x += velocity.dx;
+            sum += position.x;
+        }
+        return sum;
+    };
 }
 
 }  // namespace
-
-int main()
-{
-    testCreateAndDestroy();
-    testStaleHandleAfterRecycle();
-    testComponents();
-    testSwapAndPopDoesNotCorruptOtherEntities();
-    testDestroyEntityClearsEveryComponentType();
-    testView();
-    testPairView();
-    testAddingTwiceReplaces();
-    testOnRemove();
-
-    if( gFailures == 0 )
-    {
-        std::printf( "\nAll registry tests passed.\n" );
-        return 0;
-    }
-
-    std::printf( "\n%d check(s) failed.\n", gFailures );
-    return 1;
-}

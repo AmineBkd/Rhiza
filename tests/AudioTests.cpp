@@ -4,8 +4,10 @@
 
 #include "audio/Audio.h"
 
+#include <catch2/benchmark/catch_benchmark.hpp>
+#include <catch2/catch_test_macros.hpp>
+
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -18,17 +20,6 @@
 
 namespace
 {
-
-int gFailures = 0;
-
-void check( bool condition, const std::string &what )
-{
-    if( !condition )
-    {
-        std::printf( "  FAIL: %s\n", what.c_str() );
-        ++gFailures;
-    }
-}
 
 constexpr uint32_t kRate = Rhiza::Audio::kSampleRate;
 
@@ -105,7 +96,8 @@ uint32_t makeSound( Rhiza::Audio &audio, uint32_t channels, float seconds, const
 {
     std::string error;
     const uint32_t sound = audio.createSound( sineWav( channels, seconds ), key, maxCopies, error );
-    check( sound != 0, "sound '" + key + "' created: " + error );
+    INFO( "sound '" << key << "': " << error );
+    CHECK( sound != 0 );
     return sound;
 }
 
@@ -116,34 +108,32 @@ Rhiza::PlayDesc looping()
     return desc;
 }
 
-void testSilenceAndPlayback()
+TEST_CASE( "Audio: playback" )
 {
-    std::printf( "playback:\n" );
     Rhiza::Audio audio;
-    check( audio.initialize( 4, 2, 4 ), "initialises without a sound card" );
-    check( silent( listen( audio ) ), "silent before anything plays" );
+    CHECK( audio.initialize( 4, 2, 4 ) );
+    CHECK( silent( listen( audio ) ) );
 
     const uint32_t beep = makeSound( audio, 1, 0.1f, "beep.wav" );
     const Rhiza::Audio::VoiceId voice = audio.play( beep, {} );
-    check( voice.id != 0, "play returns a voice" );
-    check( !silent( listen( audio, 512 ) ), "playing a sound is heard" );
+    CHECK( voice.id != 0 );
+    CHECK( !silent( listen( audio, 512 ) ) );
 
     advance( audio, 0.2f );
-    check( !audio.isPlaying( voice ), "a sound stops on its own at its end" );
-    check( audio.playingCopies( beep ) == 0, "and stops being counted" );
-    check( silent( listen( audio ) ), "silent afterwards" );
+    CHECK( !audio.isPlaying( voice ) );
+    CHECK( audio.playingCopies( beep ) == 0 );
+    CHECK( silent( listen( audio ) ) );
 
     const Rhiza::Audio::VoiceId loop = audio.play( beep, looping() );
     advance( audio, 0.3f );
-    check( audio.isPlaying( loop ), "a looping sound keeps going past its end" );
+    CHECK( audio.isPlaying( loop ) );
     audio.stop( loop );
-    check( !audio.isPlaying( loop ), "stop stops it" );
-    check( silent( listen( audio ) ), "and silences it" );
+    CHECK( !audio.isPlaying( loop ) );
+    CHECK( silent( listen( audio ) ) );
 }
 
-void testCopyCap()
+TEST_CASE( "Audio: per-sound copy cap" )
 {
-    std::printf( "per-sound copy cap:\n" );
     Rhiza::Audio audio;
     audio.initialize( 8, 0, 4 );
     const uint32_t shot = makeSound( audio, 1, 0.5f, "shot.wav", 2 );
@@ -151,23 +141,23 @@ void testCopyCap()
     const Rhiza::Audio::VoiceId first = audio.play( shot, looping() );
     const Rhiza::Audio::VoiceId second = audio.play( shot, looping() );
     const Rhiza::Audio::VoiceId third = audio.play( shot, looping() );
-    check( audio.playingCopies( shot ) == 2, "never more copies than the cap" );
-    check( !audio.isPlaying( first ), "the oldest copy was restarted for the new one" );
-    check( audio.isPlaying( second ) && audio.isPlaying( third ), "the newer copies play" );
+    CHECK( audio.playingCopies( shot ) == 2 );
+    CHECK( !audio.isPlaying( first ) );
+    CHECK( audio.isPlaying( second ) );
+    CHECK( audio.isPlaying( third ) );
 
     audio.setMaxCopies( shot, 3 );
     audio.play( shot, looping() );
-    check( audio.playingCopies( shot ) == 3, "a raised cap allows more" );
+    CHECK( audio.playingCopies( shot ) == 3 );
 
     const uint32_t defaulted = makeSound( audio, 1, 0.5f, "default.wav" );
     for( int i = 0; i < 6; ++i )
         audio.play( defaulted, looping() );
-    check( audio.playingCopies( defaulted ) == 4, "the default cap applies when none is given" );
+    CHECK( audio.playingCopies( defaulted ) == 4 );
 }
 
-void testSlotsCountUniqueSounds()
+TEST_CASE( "Audio: slots count unique sounds" )
 {
-    std::printf( "slots count unique sounds:\n" );
     Rhiza::Audio audio;
     audio.initialize( 2, 0, 4 );
     const uint32_t a = makeSound( audio, 1, 0.5f, "a.wav" );
@@ -178,55 +168,53 @@ void testSlotsCountUniqueSounds()
     audio.play( a, looping() );
     audio.play( a, looping() );
     audio.play( b, looping() );
-    check( audio.playingCopies( a ) == 3 && audio.playingCopies( b ) == 1,
-           "three copies of one sound take one slot, leaving one for another" );
+    CHECK( audio.playingCopies( a ) == 3 );
+    CHECK( audio.playingCopies( b ) == 1 );
 
     audio.play( c, looping() );
-    check( audio.playingCopies( a ) == 0, "a third sound takes over the oldest slot, all its copies" );
-    check( audio.playingCopies( b ) == 1 && audio.playingCopies( c ) == 1, "the other slots are untouched" );
+    CHECK( audio.playingCopies( a ) == 0 );
+    CHECK( audio.playingCopies( b ) == 1 );
+    CHECK( audio.playingCopies( c ) == 1 );
 }
 
-void testStereoPool()
+TEST_CASE( "Audio: mono and stereo pools are separate" )
 {
-    std::printf( "mono and stereo pools are separate:\n" );
     Rhiza::Audio audio;
     audio.initialize( 1, 1, 4 );
     const uint32_t world = makeSound( audio, 1, 0.5f, "world.wav" );
     const uint32_t ui = makeSound( audio, 2, 0.5f, "ui.wav" );
     audio.play( world, looping() );
     audio.play( ui, looping() );
-    check( audio.playingCopies( world ) == 1 && audio.playingCopies( ui ) == 1,
-           "a full mono pool leaves the stereo one free" );
+    CHECK( audio.playingCopies( world ) == 1 );
+    CHECK( audio.playingCopies( ui ) == 1 );
 
     Rhiza::Audio monoOnly;
     monoOnly.initialize( 4, 0, 4 );
     const uint32_t stereo = makeSound( monoOnly, 2, 0.5f, "stereo.wav" );
-    check( monoOnly.play( stereo, {} ).id == 0, "no stereo slots: a stereo sound does not play" );
+    CHECK( monoOnly.play( stereo, {} ).id == 0 );
 }
 
-void testBuses()
+TEST_CASE( "Audio: buses" )
 {
-    std::printf( "buses:\n" );
     Rhiza::Audio audio;
     audio.initialize( 4, 2, 4 );
     const uint32_t hum = makeSound( audio, 1, 0.5f, "hum.wav" );
     const Rhiza::Audio::VoiceId voice = audio.play( hum, looping() );
 
     audio.setBusVolume( Rhiza::AudioBus::Sfx, 0.0f );
-    check( silent( listen( audio ) ), "bus volume 0 silences it" );
+    CHECK( silent( listen( audio ) ) );
     audio.setBusVolume( Rhiza::AudioBus::Sfx, 1.0f );
-    check( !silent( listen( audio ) ), "volume back up, heard again" );
+    CHECK( !silent( listen( audio ) ) );
 
     audio.setBusPaused( Rhiza::AudioBus::Sfx, true );
-    check( silent( listen( audio ) ), "a paused bus is silent" );
-    check( audio.isPlaying( voice ), "but its sounds are paused, not stopped" );
+    CHECK( silent( listen( audio ) ) );
+    CHECK( audio.isPlaying( voice ) );
     audio.setBusPaused( Rhiza::AudioBus::Sfx, false );
-    check( !silent( listen( audio ) ), "and resume" );
+    CHECK( !silent( listen( audio ) ) );
 }
 
-void testUiBus()
+TEST_CASE( "Audio: UI bus survives a paused game" )
 {
-    std::printf( "UI bus survives a paused game:\n" );
     Rhiza::Audio audio;
     audio.initialize( 4, 2, 4 );
     const uint32_t world = makeSound( audio, 1, 0.5f, "world.wav" );
@@ -241,20 +229,19 @@ void testUiBus()
     audio.play( click, ui );
 
     audio.setBusPaused( Rhiza::AudioBus::Sfx, true );
-    check( !silent( listen( audio ) ), "pausing Sfx leaves UI sounds playing" );
+    CHECK( !silent( listen( audio ) ) );
     audio.setBusVolume( Rhiza::AudioBus::Ui, 0.0f );
-    check( silent( listen( audio ) ), "the UI bus has its own volume" );
+    CHECK( silent( listen( audio ) ) );
 
     audio.setBusVolume( Rhiza::AudioBus::Ui, 1.0f );
     audio.setBusPaused( Rhiza::AudioBus::Sfx, false );
     audio.play( world, looping() );
     audio.setBusPaused( Rhiza::AudioBus::Ui, true );
-    check( !silent( listen( audio ) ), "and pausing UI leaves Sfx playing" );
+    CHECK( !silent( listen( audio ) ) );
 }
 
-void testMasterVolume()
+TEST_CASE( "Audio: master volume" )
 {
-    std::printf( "master volume:\n" );
     Rhiza::Audio audio;
     audio.initialize( 4, 2, 4 );
     const uint32_t hum = makeSound( audio, 1, 0.5f, "hum.wav" );
@@ -265,20 +252,19 @@ void testMasterVolume()
 
     audio.setMasterVolume( 0.5f );
     const Loudness half = listen( audio );
-    check( std::fabs( half.both() - full.both() * 0.5f ) < full.both() * 0.05f, "halves everything" );
+    CHECK( std::fabs( half.both() - full.both() * 0.5f ) < full.both() * 0.05f );
 
     audio.setMasterVolume( 0.0f );
-    check( silent( listen( audio ) ), "zero silences sounds and music alike" );
+    CHECK( silent( listen( audio ) ) );
 
     audio.setMasterVolume( 1.0f );
     audio.setBusVolume( Rhiza::AudioBus::Sfx, 0.0f );
     audio.setBusVolume( Rhiza::AudioBus::Music, 0.0f );
-    check( silent( listen( audio ) ), "bus volumes still apply underneath it" );
+    CHECK( silent( listen( audio ) ) );
 }
 
-void testPositional()
+TEST_CASE( "Audio: positional audio" )
 {
-    std::printf( "positional audio:\n" );
     Rhiza::Audio audio;
     audio.initialize( 4, 0, 4 );
     audio.setListener( { 0, 0, 0 }, { 0, 0, -1 }, { 0, 1, 0 }, {} );
@@ -295,32 +281,31 @@ void testPositional()
     };
 
     const Loudness right = heardFrom( { 5, 0, 0 } );
-    check( right.right > right.left * 1.5f, "a sound on the right is louder on the right" );
+    CHECK( right.right > right.left * 1.5f );
     const Loudness left = heardFrom( { -5, 0, 0 } );
-    check( left.left > left.right * 1.5f, "a sound on the left is louder on the left" );
+    CHECK( left.left > left.right * 1.5f );
 
     const Loudness near = heardFrom( { 0, 0, -5 } );
     const Loudness far = heardFrom( { 0, 0, -80 } );
-    check( far.both() < near.both() * 0.5f, "a distant sound is quieter" );
+    CHECK( far.both() < near.both() * 0.5f );
 }
 
-void testCacheAndDestroy()
+TEST_CASE( "Audio: cache and destroy" )
 {
-    std::printf( "cache and destroy:\n" );
     Rhiza::Audio audio;
     audio.initialize( 4, 0, 4 );
     const uint32_t boom = makeSound( audio, 1, 0.5f, "boom.wav" );
-    check( audio.acquireCachedSound( "boom.wav" ) == boom, "a second load gets the same sound" );
-    check( audio.acquireCachedSound( "other.wav" ) == 0, "a different path is not a hit" );
+    CHECK( audio.acquireCachedSound( "boom.wav" ) == boom );
+    CHECK( audio.acquireCachedSound( "other.wav" ) == 0 );
 
     audio.destroySound( boom );
-    check( audio.play( boom, {} ).id != 0, "still alive while one load remains" );
+    CHECK( audio.play( boom, {} ).id != 0 );
 
     audio.play( boom, looping() );
     audio.destroySound( boom );
-    check( silent( listen( audio ) ), "destroying the last load silences its voices" );
-    check( audio.play( boom, {} ).id == 0, "and it is gone" );
-    check( audio.acquireCachedSound( "boom.wav" ) == 0, "from the cache too" );
+    CHECK( silent( listen( audio ) ) );
+    CHECK( audio.play( boom, {} ).id == 0 );
+    CHECK( audio.acquireCachedSound( "boom.wav" ) == 0 );
 }
 
 std::vector<uint8_t> readTestOgg()
@@ -329,65 +314,68 @@ std::vector<uint8_t> readTestOgg()
     return std::vector<uint8_t>( std::istreambuf_iterator<char>( file ), {} );
 }
 
-void testMusic()
+TEST_CASE( "Audio: music" )
 {
-    std::printf( "music:\n" );
     Rhiza::Audio audio;
     audio.initialize( 4, 0, 4 );
     std::string error;
 
-    check( audio.playMusic( sineWav( 2, 0.1f ), 0.0f, error ), "plays: " + error );
+    const bool playedSine = audio.playMusic( sineWav( 2, 0.1f ), 0.0f, error );
+    CAPTURE( error );
+    CHECK( playedSine );
     advance( audio, 0.35f );
-    check( !silent( listen( audio ) ), "loops past the end of the track" );
+    CHECK( !silent( listen( audio ) ) );
     audio.stopMusic( 0.0f );
-    check( silent( listen( audio ) ), "stops" );
+    CHECK( silent( listen( audio ) ) );
 
     const std::vector<uint8_t> ogg = readTestOgg();
-    check( !ogg.empty(), "test Ogg file found" );
-    check( audio.playMusic( ogg, 0.0f, error ), "Ogg Vorbis decodes: " + error );
-    check( !silent( listen( audio ) ), "and is heard" );
+    CHECK( !ogg.empty() );
+    const bool playedOgg = audio.playMusic( ogg, 0.0f, error );
+    CAPTURE( error );
+    CHECK( playedOgg );
+    CHECK( !silent( listen( audio ) ) );
 
     audio.setBusVolume( Rhiza::AudioBus::Music, 0.0f );
-    check( silent( listen( audio ) ), "the music bus controls it" );
+    CHECK( silent( listen( audio ) ) );
 }
 
-void testRejections()
+TEST_CASE( "Audio: bad data is rejected" )
 {
-    std::printf( "bad data is rejected:\n" );
     Rhiza::Audio audio;
     audio.initialize( 4, 0, 4 );
     std::string error;
     const std::vector<uint8_t> garbage( 64, 0x5A );
-    check( audio.createSound( garbage, "bad.wav", 0, error ) == 0, "garbage sound rejected" );
-    check( !error.empty(), "with a reason" );
-    check( !audio.playMusic( garbage, 0.0f, error ), "garbage music rejected" );
-    check( audio.play( 12345, {} ).id == 0, "an unknown sound does not play" );
+    CHECK( audio.createSound( garbage, "bad.wav", 0, error ) == 0 );
+    CHECK( !error.empty() );
+    CHECK( !audio.playMusic( garbage, 0.0f, error ) );
+    CHECK( audio.play( 12345, {} ).id == 0 );
     audio.stop( { 999, 1 } );
-    check( !audio.isPlaying( { 999, 1 } ), "an unknown voice is harmless" );
+    CHECK( !audio.isPlaying( { 999, 1 } ) );
+}
+
+// Hidden from ctest; run with: RhizaAudioTests [benchmark]
+TEST_CASE( "Audio: mix benchmark", "[.benchmark]" )
+{
+    Rhiza::Audio audio;
+    audio.initialize( 56, 8, 4 );
+    for( int s = 0; s < 4; ++s )
+    {
+        const uint32_t sound = makeSound( audio, 1, 1.0f, "voice" + std::to_string( s ) );
+        for( int copy = 0; copy < 4; ++copy )
+        {
+            Rhiza::PlayDesc desc = looping();
+            desc.positional = true;
+            desc.position = { static_cast<float>( s * 10 - 15 ), static_cast<float>( copy * 5 ), 0.0f };
+            audio.play( sound, desc );
+        }
+    }
+
+    std::vector<float> buffer( 512 * 2 );
+    BENCHMARK( "mix 512 frames, 16 positional voices" )
+    {
+        audio.mix( buffer.data(), 512 );
+        return buffer[0];
+    };
 }
 
 }  // namespace
-
-int main()
-{
-    testSilenceAndPlayback();
-    testCopyCap();
-    testSlotsCountUniqueSounds();
-    testStereoPool();
-    testBuses();
-    testUiBus();
-    testMasterVolume();
-    testPositional();
-    testCacheAndDestroy();
-    testMusic();
-    testRejections();
-
-    if( gFailures == 0 )
-    {
-        std::printf( "\nAll audio tests passed.\n" );
-        return 0;
-    }
-
-    std::printf( "\n%d check(s) failed.\n", gFailures );
-    return 1;
-}

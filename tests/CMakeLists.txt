@@ -1,82 +1,31 @@
 project(RhizaTests LANGUAGES CXX)
 
-# These tests cover the parts of the engine that are pure data and never
-# start a GPU, window or driver, so they run anywhere - including CI
-# containers with no display.
-add_executable(ShapesTests ShapesTests.cpp)
-target_link_libraries(ShapesTests PRIVATE RhizaEngine)
+find_package(Catch2 3 CONFIG REQUIRED)
+include(Catch)
 
-add_test(NAME ShapesTests COMMAND ShapesTests)
+# One executable per layer, linking only that layer, so none of them starts a
+# GPU, window or sound card and all of them run in CI containers with no
+# display. ctest skips benchmarks, since timings on shared runners are noise:
+# run an executable directly to measure.
+function(rhiza_add_tests target)
+    add_executable(${target} ${ARGN})
+    target_link_libraries(${target} PRIVATE Catch2::Catch2WithMain)
+    rhiza_enable_warnings(${target})
+    catch_discover_tests(${target} EXTRA_ARGS --skip-benchmarks DISCOVERY_MODE PRE_TEST)
+endfunction()
 
-# platform/Input.h is engine-private (Window is the only public-facing way
-# to feed them events), but Input itself has no SDL or Ogre dependency, so
-# it's compiled directly into this test rather than linked - same
-# no-GPU-no-window guarantee as ShapesTests, just reaching one directory
-# further in to get at the class instead of going through a public header.
-add_executable(InputTests InputTests.cpp ${CMAKE_SOURCE_DIR}/engine/src/platform/Input.cpp)
-target_include_directories(InputTests PRIVATE
-    ${CMAKE_SOURCE_DIR}/engine/include
-    ${CMAKE_SOURCE_DIR}/engine/src
+rhiza_add_tests(RhizaCoreTests ShapesTests.cpp ClockTests.cpp MathTests.cpp AssetTests.cpp)
+target_link_libraries(RhizaCoreTests PRIVATE RhizaCore)
+
+rhiza_add_tests(RhizaPlatformTests InputTests.cpp)
+target_link_libraries(RhizaPlatformTests PRIVATE RhizaPlatform)
+
+# The demo's music doubles as real-world Ogg Vorbis input.
+rhiza_add_tests(RhizaAudioTests AudioTests.cpp)
+target_link_libraries(RhizaAudioTests PRIVATE RhizaAudio)
+target_compile_definitions(RhizaAudioTests PRIVATE
+    RHIZA_TEST_OGG="${CMAKE_CURRENT_SOURCE_DIR}/../game/assets/music.ogg"
 )
 
-add_test(NAME InputTests COMMAND InputTests)
-
-# Same reasoning as InputTests: Clock has no SDL or Ogre dependency (just
-# <chrono>), so it's compiled directly rather than linked.
-add_executable(ClockTests ClockTests.cpp ${CMAKE_SOURCE_DIR}/engine/src/core/Clock.cpp)
-target_include_directories(ClockTests PRIVATE
-    ${CMAKE_SOURCE_DIR}/engine/include
-    ${CMAKE_SOURCE_DIR}/engine/src
-)
-
-add_test(NAME ClockTests COMMAND ClockTests)
-
-# RhizaFramework is header-only and has no SDL/Ogre dependency either, so
-# this runs anywhere too - just a link (for the include path) rather than
-# compiling an engine/src file directly, since there's no .cpp to compile.
-add_executable(RegistryTests RegistryTests.cpp)
-target_link_libraries(RegistryTests PRIVATE RhizaFramework)
-
-add_test(NAME RegistryTests COMMAND RegistryTests)
-
-# Path keys, the asset cache's bookkeeping and glTF parsing are pure data
-# too, so the parser compiles straight in like Input and Clock above.
-add_executable(AssetTests AssetTests.cpp
-    ${CMAKE_SOURCE_DIR}/engine/src/core/AssetPath.cpp
-    ${CMAKE_SOURCE_DIR}/engine/src/core/AssetCache.cpp
-    ${CMAKE_SOURCE_DIR}/engine/src/core/Gltf.cpp
-)
-target_include_directories(AssetTests PRIVATE
-    ${CMAKE_SOURCE_DIR}/engine/include
-    ${CMAKE_SOURCE_DIR}/engine/src
-)
-target_link_libraries(AssetTests PRIVATE RhizaThirdParty)
-
-add_test(NAME AssetTests COMMAND AssetTests)
-
-# The mixer runs with no sound card, so this drives the same path SDL pulls
-# from in the game. The Ogg file is the game's music, used as real-world
-# Vorbis input.
-add_executable(AudioTests AudioTests.cpp
-    ${CMAKE_SOURCE_DIR}/engine/src/audio/Audio.cpp
-    ${CMAKE_SOURCE_DIR}/engine/src/core/AssetCache.cpp
-)
-target_include_directories(AudioTests PRIVATE
-    ${CMAKE_SOURCE_DIR}/engine/include
-    ${CMAKE_SOURCE_DIR}/engine/src
-)
-target_link_libraries(AudioTests PRIVATE RhizaThirdParty)
-target_compile_definitions(AudioTests PRIVATE
-    RHIZA_TEST_OGG="${CMAKE_SOURCE_DIR}/game/assets/music.ogg"
-)
-
-add_test(NAME AudioTests COMMAND AudioTests)
-
-add_executable(MathTests MathTests.cpp ${CMAKE_SOURCE_DIR}/engine/src/core/Math.cpp)
-target_include_directories(MathTests PRIVATE ${CMAKE_SOURCE_DIR}/engine/include)
-
-add_test(NAME MathTests COMMAND MathTests)
-
-foreach(test ShapesTests InputTests ClockTests RegistryTests AssetTests AudioTests MathTests)
-    rhiza_enable_warnings(${test})
-endforeach()
+rhiza_add_tests(RhizaFrameworkTests RegistryTests.cpp)
+target_link_libraries(RhizaFrameworkTests PRIVATE RhizaFramework)

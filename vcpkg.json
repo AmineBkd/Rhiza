@@ -6,6 +6,7 @@
     "ogre-next",
     "cgltf",
     "miniaudio",
-    "stb"
+    "stb",
+    "catch2"
   ]
 }

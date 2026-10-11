@@ -8,52 +8,38 @@
 
 #include "core/Clock.h"
 
+#include <catch2/catch_test_macros.hpp>
+
 #include <chrono>
-#include <cstdio>
 #include <string>
 #include <thread>
 
 namespace
 {
 
-int gFailures = 0;
-
-void check( bool condition, const std::string &what )
+TEST_CASE( "Clock: first tick" )
 {
-    if( !condition )
-    {
-        std::printf( "  FAIL: %s\n", what.c_str() );
-        ++gFailures;
-    }
-}
-
-void testFirstTickIsSmall()
-{
-    std::printf( "first tick:\n" );
     Rhiza::Clock clock;
     clock.tick();
 
     // No sleep between construction and this tick(), so elapsed time should
     // be small - not exactly zero (constructing the object and calling
     // tick() both take some real time), but nowhere near a full second.
-    check( clock.realDeltaSeconds() >= 0.0f, "realDeltaSeconds is never negative" );
-    check( clock.realDeltaSeconds() < 1.0f, "first tick with no sleep is well under a second" );
+    CHECK( clock.realDeltaSeconds() >= 0.0f );
+    CHECK( clock.realDeltaSeconds() < 1.0f );
 }
 
-void testTimeScaleDefaultsToNormalSpeed()
+TEST_CASE( "Clock: default time scale" )
 {
-    std::printf( "default time scale:\n" );
     Rhiza::Clock clock;
     clock.tick();
 
-    check( clock.timeScale() == 1.0f, "timeScale defaults to 1" );
-    check( clock.scaledDeltaSeconds() == clock.realDeltaSeconds(),
-           "scaled equals real at the default scale" );
+    CHECK( clock.timeScale() == 1.0f );
+    CHECK( clock.scaledDeltaSeconds() == clock.realDeltaSeconds() );
 }
 
-void testTimeScaleFreezesAndReverses()
+TEST_CASE( "Clock: time scale freeze and reverse" )
 {
-    std::printf( "time scale freeze and reverse:\n" );
     Rhiza::Clock clock;
     // Without it, construct-then-tick can land inside one steady_clock tick
     // and measure exactly zero.
@@ -63,23 +49,21 @@ void testTimeScaleFreezesAndReverses()
     // Frozen: hitstop's core case. Real time must keep moving even though
     // scaled time reports nothing happened.
     clock.setTimeScale( 0.0f );
-    check( clock.scaledDeltaSeconds() == 0.0f, "scale 0 freezes scaled time" );
-    check( clock.realDeltaSeconds() > 0.0f, "real time is unaffected by scale 0" );
+    CHECK( clock.scaledDeltaSeconds() == 0.0f );
+    CHECK( clock.realDeltaSeconds() > 0.0f );
 
     // Doubled: gameplay running at 2x.
     clock.setTimeScale( 2.0f );
-    check( clock.scaledDeltaSeconds() == clock.realDeltaSeconds() * 2.0f,
-           "scale 2 doubles scaled time" );
+    CHECK( clock.scaledDeltaSeconds() == clock.realDeltaSeconds() * 2.0f );
 
     // Negative scale is intentional - time running backward - so it must
     // not be clamped away as an accidental sign error.
     clock.setTimeScale( -1.0f );
-    check( clock.scaledDeltaSeconds() < 0.0f, "negative scale reverses scaled time" );
+    CHECK( clock.scaledDeltaSeconds() < 0.0f );
 }
 
-void testLongStallIsClamped()
+TEST_CASE( "Clock: long stall is clamped" )
 {
-    std::printf( "long stall is clamped:\n" );
     Rhiza::Clock clock;
     clock.tick();
 
@@ -90,26 +74,8 @@ void testLongStallIsClamped()
     std::this_thread::sleep_for( std::chrono::milliseconds( 400 ) );
     clock.tick();
 
-    check( clock.realDeltaSeconds() > 0.05f, "tick still measured real elapsed time" );
-    check( clock.realDeltaSeconds() < 0.3f,
-           "a 400ms stall is capped well below the true elapsed time" );
+    CHECK( clock.realDeltaSeconds() > 0.05f );
+    CHECK( clock.realDeltaSeconds() < 0.3f );
 }
 
 }  // namespace
-
-int main()
-{
-    testFirstTickIsSmall();
-    testTimeScaleDefaultsToNormalSpeed();
-    testTimeScaleFreezesAndReverses();
-    testLongStallIsClamped();
-
-    if( gFailures == 0 )
-    {
-        std::printf( "\nAll clock tests passed.\n" );
-        return 0;
-    }
-
-    std::printf( "\n%d check(s) failed.\n", gFailures );
-    return 1;
-}

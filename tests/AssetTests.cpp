@@ -6,8 +6,10 @@
 #include "core/AssetPath.h"
 #include "core/Gltf.h"
 
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -17,17 +19,6 @@
 
 namespace
 {
-
-int gFailures = 0;
-
-void check( bool condition, const std::string &what )
-{
-    if( !condition )
-    {
-        std::printf( "  FAIL: %s\n", what.c_str() );
-        ++gFailures;
-    }
-}
 
 bool near( float a, float b ) { return std::fabs( a - b ) < 1e-4f; }
 
@@ -157,104 +148,101 @@ const Rhiza::FileReader kNoFiles = []( const std::string &, std::vector<uint8_t>
 bool parse( const std::vector<uint8_t> &bytes, Rhiza::MeshDesc &mesh, std::string &error,
             const Rhiza::FileReader &reader = kNoFiles, const std::string &path = "test.gltf" )
 {
-    return Rhiza::parseGltfMesh( bytes, path, reader, mesh, error );
+    const bool parsed = Rhiza::parseGltfMesh( bytes, path, reader, mesh, error );
+    if( !parsed )
+        UNSCOPED_INFO( "parse error: " << error );
+    return parsed;
 }
 
-void testNormalizeAssetPath()
+TEST_CASE( "Assets: normalizeAssetPath" )
 {
-    std::printf( "normalizeAssetPath:\n" );
-    check( Rhiza::normalizeAssetPath( "ship.png" ) == "ship.png", "plain name unchanged" );
-    check( Rhiza::normalizeAssetPath( "./ship.png" ) == "ship.png", "leading ./ removed" );
-    check( Rhiza::normalizeAssetPath( "textures//ship.png" ) == "textures/ship.png", "doubled slash collapsed" );
-    check( Rhiza::normalizeAssetPath( "textures\\ship.png" ) == "textures/ship.png", "backslash becomes slash" );
-    check( Rhiza::normalizeAssetPath( "a/b/../ship.png" ) == "a/ship.png", ".. resolved" );
-    check( Rhiza::normalizeAssetPath( "Ship.png" ) == "Ship.png", "case kept" );
+    CHECK( Rhiza::normalizeAssetPath( "ship.png" ) == "ship.png" );
+    CHECK( Rhiza::normalizeAssetPath( "./ship.png" ) == "ship.png" );
+    CHECK( Rhiza::normalizeAssetPath( "textures//ship.png" ) == "textures/ship.png" );
+    CHECK( Rhiza::normalizeAssetPath( "textures\\ship.png" ) == "textures/ship.png" );
+    CHECK( Rhiza::normalizeAssetPath( "a/b/../ship.png" ) == "a/ship.png" );
+    CHECK( Rhiza::normalizeAssetPath( "Ship.png" ) == "Ship.png" );
 }
 
-void testJoinAssetPath()
+TEST_CASE( "Assets: joinAssetPath" )
 {
-    std::printf( "joinAssetPath:\n" );
-    check( Rhiza::joinAssetPath( "", "a.png" ) == "a.png", "empty root leaves path relative" );
-    check( Rhiza::joinAssetPath( "root", "a.png" ) == "root/a.png", "separator added" );
-    check( Rhiza::joinAssetPath( "root/", "a.png" ) == "root/a.png", "no doubled separator" );
-    check( Rhiza::joinAssetPath( "C:\\game\\", "a.png" ) == "C:\\game\\a.png", "Windows root kept" );
+    CHECK( Rhiza::joinAssetPath( "", "a.png" ) == "a.png" );
+    CHECK( Rhiza::joinAssetPath( "root", "a.png" ) == "root/a.png" );
+    CHECK( Rhiza::joinAssetPath( "root/", "a.png" ) == "root/a.png" );
+    CHECK( Rhiza::joinAssetPath( "C:\\game\\", "a.png" ) == "C:\\game\\a.png" );
 }
 
-void testCacheReturnsTheSameHandle()
+TEST_CASE( "Assets: cache: same key, same handle" )
 {
-    std::printf( "cache: same key, same handle:\n" );
     Rhiza::AssetCache cache;
-    check( cache.acquire( "rock.glb" ) == 0, "nothing cached yet" );
+    CHECK( cache.acquire( "rock.glb" ) == 0 );
 
     cache.add( "rock.glb", 7 );
-    check( cache.acquire( "rock.glb" ) == 7, "second load gets the first load's handle" );
-    check( cache.acquire( "rock.glb" ) == 7, "and so does a third" );
-    check( cache.loadCount( 7 ) == 3, "three loads counted" );
+    CHECK( cache.acquire( "rock.glb" ) == 7 );
+    CHECK( cache.acquire( "rock.glb" ) == 7 );
+    CHECK( cache.loadCount( 7 ) == 3 );
 
-    check( cache.acquire( "ship.png" ) == 0, "a different key is not a hit" );
+    CHECK( cache.acquire( "ship.png" ) == 0 );
     cache.add( "ship.png", 8 );
-    check( cache.acquire( "ship.png" ) == 8 && cache.loadCount( 7 ) == 3, "keys stay independent" );
+    CHECK( cache.acquire( "ship.png" ) == 8 );
+    CHECK( cache.loadCount( 7 ) == 3 );
 }
 
-void testCacheFreesOnTheLastRelease()
+TEST_CASE( "Assets: cache: freed by the last release only" )
 {
-    std::printf( "cache: freed by the last release only:\n" );
     Rhiza::AssetCache cache;
     cache.add( "rock.glb", 7 );
     cache.acquire( "rock.glb" );
     cache.acquire( "rock.glb" );
 
-    check( cache.releaseIfShared( 7 ), "first release: others still hold it" );
-    check( cache.releaseIfShared( 7 ), "second release: one still holds it" );
-    check( cache.loadCount( 7 ) == 1, "one load left" );
-    check( !cache.releaseIfShared( 7 ), "last release tells the caller to free it" );
-    check( cache.loadCount( 7 ) == 1, "and does not count below one by itself" );
+    CHECK( cache.releaseIfShared( 7 ) );
+    CHECK( cache.releaseIfShared( 7 ) );
+    CHECK( cache.loadCount( 7 ) == 1 );
+    CHECK( !cache.releaseIfShared( 7 ) );
+    CHECK( cache.loadCount( 7 ) == 1 );
 
     cache.forget( 7 );
-    check( cache.acquire( "rock.glb" ) == 0, "forgotten: the next load must load again" );
-    check( cache.loadCount( 7 ) == 0, "nothing counted for the old handle" );
+    CHECK( cache.acquire( "rock.glb" ) == 0 );
+    CHECK( cache.loadCount( 7 ) == 0 );
 
     cache.add( "rock.glb", 12 );
-    check( cache.acquire( "rock.glb" ) == 12, "reloaded under a new handle" );
+    CHECK( cache.acquire( "rock.glb" ) == 12 );
 }
 
-void testCacheIgnoresUnknownHandles()
+TEST_CASE( "Assets: cache: handles it never saw" )
 {
-    std::printf( "cache: handles it never saw:\n" );
     Rhiza::AssetCache cache;
-    check( !cache.releaseIfShared( 99 ), "uncached handle: caller frees it as usual" );
+    CHECK( !cache.releaseIfShared( 99 ) );
     cache.forget( 99 );
     cache.add( "a", 1 );
     cache.forget( 2 );
-    check( cache.acquire( "a" ) == 1, "forgetting an unknown handle leaves others alone" );
+    CHECK( cache.acquire( "a" ) == 1 );
 
     cache.clear();
-    check( cache.acquire( "a" ) == 0, "clear drops everything" );
+    CHECK( cache.acquire( "a" ) == 0 );
 }
 
-void testSameNameInDifferentFolders()
+TEST_CASE( "Assets: cache: same file name in different folders" )
 {
-    std::printf( "cache: same file name in different folders:\n" );
     const std::string ships = Rhiza::normalizeAssetPath( "ships/hull.png" );
     const std::string stations = Rhiza::normalizeAssetPath( "stations/hull.png" );
-    check( ships != stations, "keys keep the folder" );
+    CHECK( ships != stations );
 
     Rhiza::AssetCache cache;
     cache.add( ships, 1 );
-    check( cache.acquire( stations ) == 0, "the other folder's hull.png is not a hit" );
+    CHECK( cache.acquire( stations ) == 0 );
     cache.add( stations, 2 );
-    check( cache.acquire( ships ) == 1 && cache.acquire( stations ) == 2, "both cached side by side" );
+    CHECK( cache.acquire( ships ) == 1 );
+    CHECK( cache.acquire( stations ) == 2 );
 
     const Rhiza::TextureDesc linear;
-    check( Rhiza::textureCacheKey( ships, linear ) != Rhiza::textureCacheKey( stations, linear ),
-           "texture keys differ too" );
+    CHECK( Rhiza::textureCacheKey( ships, linear ) != Rhiza::textureCacheKey( stations, linear ) );
 }
 
 // Compares names rather than asking the file system, so it reports the same
 // on case-insensitive Windows/macOS and case-sensitive Linux.
-void testFindCaseMismatch()
+TEST_CASE( "Assets: case mismatch against the names on disk" )
 {
-    std::printf( "case mismatch against the names on disk:\n" );
     namespace fs = std::filesystem;
     const fs::path root = fs::temp_directory_path() / "rhiza_asset_tests";
     std::error_code error;
@@ -263,102 +251,98 @@ void testFindCaseMismatch()
     std::ofstream( root / "Textures" / "Ship.png" ).put( 'x' );
     const std::string rootText = root.string();
 
-    check( Rhiza::findCaseMismatch( rootText, "Textures/Ship.png" ).empty(), "exact spelling: no warning" );
-    check( Rhiza::findCaseMismatch( rootText, "textures/ship.png" ) == "Textures/Ship.png",
-           "wrong case reports the spelling on disk" );
-    check( Rhiza::findCaseMismatch( rootText, "Textures/ship.png" ) == "Textures/Ship.png",
-           "a mismatch in the file name alone is caught" );
-    check( Rhiza::findCaseMismatch( rootText, "Textures/missing.png" ).empty(), "missing file: no warning" );
-    check( Rhiza::findCaseMismatch( ( root / "nowhere" ).string(), "Ship.png" ).empty(),
-           "root that is not a folder: no warning" );
+    CHECK( Rhiza::findCaseMismatch( rootText, "Textures/Ship.png" ).empty() );
+    CHECK( Rhiza::findCaseMismatch( rootText, "textures/ship.png" ) == "Textures/Ship.png" );
+    CHECK( Rhiza::findCaseMismatch( rootText, "Textures/ship.png" ) == "Textures/Ship.png" );
+    CHECK( Rhiza::findCaseMismatch( rootText, "Textures/missing.png" ).empty() );
+    CHECK( Rhiza::findCaseMismatch( ( root / "nowhere" ).string(), "Ship.png" ).empty() );
 
     fs::remove_all( root, error );
 }
 
-void testTextureCacheKey()
+TEST_CASE( "Assets: texture keys: settings are part of identity" )
 {
-    std::printf( "texture keys: settings are part of identity:\n" );
     const Rhiza::TextureDesc linear;
     Rhiza::TextureDesc nearest;
     nearest.filter = Rhiza::TextureFilter::Nearest;
     Rhiza::TextureDesc repeating;
     repeating.wrap = Rhiza::TextureWrap::Repeat;
 
-    check( Rhiza::textureCacheKey( "ship.png", linear ) == Rhiza::textureCacheKey( "ship.png", linear ),
-           "same file, same settings: same key" );
-    check( Rhiza::textureCacheKey( "ship.png", linear ) != Rhiza::textureCacheKey( "ship.png", nearest ),
-           "different filter: different key" );
-    check( Rhiza::textureCacheKey( "ship.png", linear ) != Rhiza::textureCacheKey( "ship.png", repeating ),
-           "different wrap: different key" );
-    check( Rhiza::textureCacheKey( Rhiza::normalizeAssetPath( "./textures//ship.png" ), linear ) ==
-               Rhiza::textureCacheKey( Rhiza::normalizeAssetPath( "textures/ship.png" ), linear ),
-           "two spellings of one path: same key" );
+    CHECK( Rhiza::textureCacheKey( "ship.png", linear ) == Rhiza::textureCacheKey( "ship.png", linear ) );
+    CHECK( Rhiza::textureCacheKey( "ship.png", linear ) != Rhiza::textureCacheKey( "ship.png", nearest ) );
+    CHECK( Rhiza::textureCacheKey( "ship.png", linear ) != Rhiza::textureCacheKey( "ship.png", repeating ) );
+    CHECK( Rhiza::textureCacheKey( Rhiza::normalizeAssetPath( "./textures//ship.png" ), linear ) ==
+               Rhiza::textureCacheKey( Rhiza::normalizeAssetPath( "textures/ship.png" ), linear ) );
 }
 
-void testTriangle()
+TEST_CASE( "Assets: embedded triangle" )
 {
-    std::printf( "embedded triangle:\n" );
     Rhiza::MeshDesc mesh;
     std::string error;
-    check( parse( Triangle{}.embeddedGltf(), mesh, error ), "parses: " + error );
-    check( mesh.vertices.size() == 3 && mesh.indices.size() == 3, "3 vertices, 3 indices" );
+    CHECK( parse( Triangle{}.embeddedGltf(), mesh, error ) );
+    CHECK( mesh.vertices.size() == 3 );
+    CHECK( mesh.indices.size() == 3 );
     if( mesh.vertices.size() != 3 )
         return;
-    check( near( mesh.vertices[1].position.x, 1.0f ), "positions read" );
-    check( near( mesh.vertices[0].normal.z, 1.0f ), "missing normals generated, facing +Z" );
-    check( mesh.indices[0] == 0 && mesh.indices[1] == 1 && mesh.indices[2] == 2, "indices kept in order" );
+    CHECK( near( mesh.vertices[1].position.x, 1.0f ) );
+    CHECK( near( mesh.vertices[0].normal.z, 1.0f ) );
+    CHECK( mesh.indices[0] == 0 );
+    CHECK( mesh.indices[1] == 1 );
+    CHECK( mesh.indices[2] == 2 );
 }
 
-void testNodeTranslation()
+TEST_CASE( "Assets: node transform baked" )
 {
-    std::printf( "node transform baked:\n" );
     Triangle triangle;
     triangle.nodeTransform = "\"translation\":[5,0,0]";
     Rhiza::MeshDesc mesh;
     std::string error;
-    check( parse( triangle.embeddedGltf(), mesh, error ), "parses: " + error );
-    check( !mesh.vertices.empty() && near( mesh.vertices[0].position.x, 5.0f ), "translation applied" );
+    CHECK( parse( triangle.embeddedGltf(), mesh, error ) );
+    REQUIRE( !mesh.vertices.empty() );
+    CHECK( near( mesh.vertices[0].position.x, 5.0f ) );
 }
 
-void testMirroring()
+TEST_CASE( "Assets: mirroring keeps the front face" )
 {
-    std::printf( "mirroring keeps the front face:\n" );
     Triangle triangle;
     triangle.nodeTransform = "\"scale\":[-1,1,1]";
     Rhiza::MeshDesc mesh;
     std::string error;
-    check( parse( triangle.embeddedGltf(), mesh, error ), "parses: " + error );
-    check( mesh.indices.size() == 3 && mesh.indices[1] == 2 && mesh.indices[2] == 1, "winding flipped" );
-    check( !mesh.vertices.empty() && near( mesh.vertices[0].normal.z, 1.0f ), "still faces +Z" );
+    CHECK( parse( triangle.embeddedGltf(), mesh, error ) );
+    REQUIRE( mesh.indices.size() == 3 );
+    CHECK( mesh.indices[1] == 2 );
+    CHECK( mesh.indices[2] == 1 );
+    REQUIRE( !mesh.vertices.empty() );
+    CHECK( near( mesh.vertices[0].normal.z, 1.0f ) );
 }
 
-void testNormalTransform()
+TEST_CASE( "Assets: authored normals follow the transform" )
 {
-    std::printf( "authored normals follow the transform:\n" );
     const float plusX[3] = { 1, 0, 0 };
     Triangle rotated;
     rotated.normal = plusX;
     rotated.nodeTransform = "\"rotation\":[0,0,0.7071068,0.7071068]";  // 90 degrees about +Z
     Rhiza::MeshDesc mesh;
     std::string error;
-    check( parse( rotated.embeddedGltf(), mesh, error ), "rotated parses: " + error );
-    check( !mesh.vertices.empty() && near( mesh.vertices[0].normal.y, 1.0f ), "+X normal rotated to +Y" );
+    CHECK( parse( rotated.embeddedGltf(), mesh, error ) );
+    REQUIRE( !mesh.vertices.empty() );
+    CHECK( near( mesh.vertices[0].normal.y, 1.0f ) );
 
     // Stretching along X tilts a diagonal normal toward Y, not toward X.
     const float diagonal[3] = { 0.7071068f, 0.7071068f, 0 };
     Triangle stretched;
     stretched.normal = diagonal;
     stretched.nodeTransform = "\"scale\":[2,1,1]";
-    check( parse( stretched.embeddedGltf(), mesh, error ), "stretched parses: " + error );
+    CHECK( parse( stretched.embeddedGltf(), mesh, error ) );
     if( mesh.vertices.empty() )
         return;
     const Rhiza::Vec3 n = mesh.vertices[0].normal;
-    check( near( n.x, 0.4472136f ) && near( n.y, 0.8944272f ), "inverse-transpose applied" );
+    CHECK( near( n.x, 0.4472136f ) );
+    CHECK( near( n.y, 0.8944272f ) );
 }
 
-void testExternalBuffer()
+TEST_CASE( "Assets: external buffer goes through the reader" )
 {
-    std::printf( "external buffer goes through the reader:\n" );
     Triangle triangle;
     const std::string text = triangle.json( "tri.bin" );
     std::string requested;
@@ -369,70 +353,40 @@ void testExternalBuffer()
     };
     Rhiza::MeshDesc mesh;
     std::string error;
-    check( parse( std::vector<uint8_t>( text.begin(), text.end() ), mesh, error, reader, "models/tri.gltf" ),
-           "parses: " + error );
-    check( requested == "models/tri.bin", "buffer looked up beside the .gltf, got '" + requested + "'" );
-    check( mesh.vertices.size() == 3, "geometry loaded" );
+    CHECK( parse( std::vector<uint8_t>( text.begin(), text.end() ), mesh, error, reader, "models/tri.gltf" ) );
+    CHECK( requested == "models/tri.bin" );
+    CHECK( mesh.vertices.size() == 3 );
 }
 
-void testGlb()
+TEST_CASE( "Assets: GLB container" )
 {
-    std::printf( "GLB container:\n" );
     Triangle triangle;
     triangle.indexed = false;
     Rhiza::MeshDesc mesh;
     std::string error;
-    check( parse( triangle.glb(), mesh, error ), "parses: " + error );
-    check( mesh.vertices.size() == 3, "3 vertices" );
-    check( mesh.indices.size() == 3 && mesh.indices[2] == 2, "unindexed primitive gets sequential indices" );
+    CHECK( parse( triangle.glb(), mesh, error ) );
+    CHECK( mesh.vertices.size() == 3 );
+    REQUIRE( mesh.indices.size() == 3 );
+    CHECK( mesh.indices[2] == 2 );
 }
 
-void testRejections()
+TEST_CASE( "Assets: bad input is rejected, not crashed on" )
 {
-    std::printf( "bad input is rejected, not crashed on:\n" );
     Rhiza::MeshDesc mesh;
     std::string error;
 
     const std::string garbage = "this is not gltf";
-    check( !parse( std::vector<uint8_t>( garbage.begin(), garbage.end() ), mesh, error ), "garbage rejected" );
-    check( !parse( {}, mesh, error ), "empty input rejected" );
+    CHECK( !parse( std::vector<uint8_t>( garbage.begin(), garbage.end() ), mesh, error ) );
+    CHECK( !parse( {}, mesh, error ) );
 
     Triangle points;
     points.mode = 0;
-    check( !parse( points.embeddedGltf(), mesh, error ), "points-only file rejected" );
-    check( error.find( "no triangle" ) != std::string::npos, "with a reason: " + error );
+    CHECK( !parse( points.embeddedGltf(), mesh, error ) );
+    CHECK_THAT( error, Catch::Matchers::ContainsSubstring( "no triangle" ) );
 
     Triangle external;
     const std::string text = external.json( "missing.bin" );
-    check( !parse( std::vector<uint8_t>( text.begin(), text.end() ), mesh, error ), "missing buffer rejected" );
+    CHECK( !parse( std::vector<uint8_t>( text.begin(), text.end() ), mesh, error ) );
 }
 
 }  // namespace
-
-int main()
-{
-    testNormalizeAssetPath();
-    testJoinAssetPath();
-    testCacheReturnsTheSameHandle();
-    testCacheFreesOnTheLastRelease();
-    testCacheIgnoresUnknownHandles();
-    testSameNameInDifferentFolders();
-    testFindCaseMismatch();
-    testTextureCacheKey();
-    testTriangle();
-    testNodeTranslation();
-    testMirroring();
-    testNormalTransform();
-    testExternalBuffer();
-    testGlb();
-    testRejections();
-
-    if( gFailures == 0 )
-    {
-        std::printf( "\nAll asset tests passed.\n" );
-        return 0;
-    }
-
-    std::printf( "\n%d check(s) failed.\n", gFailures );
-    return 1;
-}
