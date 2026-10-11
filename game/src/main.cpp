@@ -81,9 +81,9 @@ int main()
     {
         const float around = static_cast<float>( i ) * 0.785f;
         const float size = 0.8f + 0.1f * static_cast<float>( i );
-        const Rhiza::Entity rock =
-            spawn( rockMesh, rockMaterial,
-                   { { std::cos( around ) * 7.0f, std::sin( around ) * 7.0f, 0.0f }, {}, { size, size, size } } );
+        const Rhiza::Entity rock = spawn(
+            rockMesh, rockMaterial,
+            { { std::cos( around ) * 7.0f, std::sin( around ) * 7.0f, 0.0f }, {}, { size, size, size } } );
         registry.addComponent( rock, Spin{ spinAxes[i % 3], 0.4f + 0.15f * static_cast<float>( i ) } );
     }
 

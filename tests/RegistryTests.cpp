@@ -92,7 +92,7 @@ TEST_CASE( "Registry: add/get/has/remove component" )
     CHECK( p != nullptr );
     if( p )
         CHECK( p->x == 3.0f );
-        CHECK( p->y == 4.0f );
+    CHECK( p->y == 4.0f );
 
     registry.removeComponent<Position>( e );
     CHECK( !registry.hasComponent<Position>( e ) );

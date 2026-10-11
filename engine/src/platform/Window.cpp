@@ -16,6 +16,7 @@ Key toRhizaKey( SDL_Scancode scancode )
 {
     switch( scancode )
     {
+        // clang-format off
     case SDL_SCANCODE_A: return Key::A;
     case SDL_SCANCODE_B: return Key::B;
     case SDL_SCANCODE_C: return Key::C;
@@ -73,12 +74,14 @@ Key toRhizaKey( SDL_Scancode scancode )
     case SDL_SCANCODE_RALT: return Key::RightAlt;
 
     default: return Key::Unknown;
+        // clang-format on
     }
 }
 
 }  // namespace
 
-Window::~Window() {
+Window::~Window()
+{
     shutdown();
 }
 
@@ -159,8 +162,7 @@ NativeWindowHandle Window::getNativeHandle() const
         handle.value = reinterpret_cast<uintptr_t>( hwnd );
     else if( Sint64 xid = SDL_GetNumberProperty( props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0 ) )
         handle.value = static_cast<uintptr_t>( xid );
-    else if( void *nsWindow =
-                 SDL_GetPointerProperty( props, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr ) )
+    else if( void *nsWindow = SDL_GetPointerProperty( props, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr ) )
         handle.value = reinterpret_cast<uintptr_t>( nsWindow );
 
     return handle;

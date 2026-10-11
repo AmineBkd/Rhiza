@@ -45,8 +45,7 @@ NodeTransform makeNodeTransform( const float *matrix )
 Vec3 transformPoint( const NodeTransform &t, Vec3 p )
 {
     const float *m = t.matrix;
-    return { m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12],
-             m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13],
+    return { m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12], m[1] * p.x + m[5] * p.y + m[9] * p.z + m[13],
              m[2] * p.x + m[6] * p.y + m[10] * p.z + m[14] };
 }
 
@@ -207,8 +206,8 @@ struct CgltfDataDeleter
 
 }  // namespace
 
-bool parseGltfMesh( const std::vector<uint8_t> &bytes, const std::string &path,
-                    const FileReader &readFile, MeshDesc &out, std::string &error )
+bool parseGltfMesh( const std::vector<uint8_t> &bytes, const std::string &path, const FileReader &readFile,
+                    MeshDesc &out, std::string &error )
 {
     cgltf_options options = {};
     options.file.read = &readThroughFileReader;
@@ -235,7 +234,8 @@ bool parseGltfMesh( const std::vector<uint8_t> &bytes, const std::string &path,
     }
 
     MeshDesc mesh;
-    const cgltf_scene *scene = data->scene ? data->scene : ( data->scenes_count > 0 ? &data->scenes[0] : nullptr );
+    const cgltf_scene *scene =
+        data->scene ? data->scene : ( data->scenes_count > 0 ? &data->scenes[0] : nullptr );
     if( scene )
     {
         for( size_t i = 0; i < scene->nodes_count; ++i )

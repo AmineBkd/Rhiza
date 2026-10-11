@@ -25,9 +25,10 @@ public:
     Capture()
     {
         Rhiza::flushLog();
-        mId = Rhiza::addLogSink( [this]( Rhiza::LogLevel level, std::string_view category, std::string_view message ) {
-            lines.push_back( { level, std::string( category ), std::string( message ) } );
-        } );
+        mId = Rhiza::addLogSink(
+            [this]( Rhiza::LogLevel level, std::string_view category, std::string_view message ) {
+                lines.push_back( { level, std::string( category ), std::string( message ) } );
+            } );
     }
     ~Capture() { Rhiza::removeLogSink( mId ); }
 
@@ -93,9 +94,10 @@ TEST_CASE( "Log: a removed sink receives nothing" )
 {
     Capture capture;
     std::vector<std::string> removed;
-    const int id = Rhiza::addLogSink( [&removed]( Rhiza::LogLevel, std::string_view, std::string_view message ) {
-        removed.emplace_back( message );
-    } );
+    const int id =
+        Rhiza::addLogSink( [&removed]( Rhiza::LogLevel, std::string_view, std::string_view message ) {
+            removed.emplace_back( message );
+        } );
     Rhiza::removeLogSink( id );
     Rhiza::logInfo( "test", "after removal" );
 

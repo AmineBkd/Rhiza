@@ -79,10 +79,14 @@ Loudness listen( Rhiza::Audio &audio, uint32_t frames = 2048 )
         left += buffer[f * 2] * buffer[f * 2];
         right += buffer[f * 2 + 1] * buffer[f * 2 + 1];
     }
-    return { static_cast<float>( std::sqrt( left / frames ) ), static_cast<float>( std::sqrt( right / frames ) ) };
+    return { static_cast<float>( std::sqrt( left / frames ) ),
+             static_cast<float>( std::sqrt( right / frames ) ) };
 }
 
-bool silent( const Loudness &l ) { return l.both() < 1e-4f; }
+bool silent( const Loudness &l )
+{
+    return l.both() < 1e-4f;
+}
 
 void advance( Rhiza::Audio &audio, float seconds )
 {

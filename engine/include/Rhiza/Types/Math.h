@@ -22,6 +22,7 @@ struct Vec3
     bool operator==( const Vec3 & ) const = default;
 };
 
+// clang-format off
 constexpr Vec2 operator+( Vec2 a, Vec2 b ) { return { a.x + b.x, a.y + b.y }; }
 constexpr Vec2 operator-( Vec2 a, Vec2 b ) { return { a.x - b.x, a.y - b.y }; }
 constexpr Vec2 operator-( Vec2 v ) { return { -v.x, -v.y }; }
@@ -58,6 +59,7 @@ constexpr float lengthSquared( Vec2 v ) { return dot( v, v ); }
 constexpr float lengthSquared( Vec3 v ) { return dot( v, v ); }
 inline float length( Vec2 v ) { return std::sqrt( lengthSquared( v ) ); }
 inline float length( Vec3 v ) { return std::sqrt( lengthSquared( v ) ); }
+// clang-format on
 
 // A zero vector stays zero rather than becoming NaN.
 inline Vec2 normalized( Vec2 v )

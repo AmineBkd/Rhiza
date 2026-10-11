@@ -9,8 +9,7 @@ namespace
 // Appends one quad as two triangles, all four corners sharing `normal`.
 // Corners go counter-clockwise seen from outside - the winding Ogre-Next
 // treats as front-facing - starting bottom-left, so textures land upright.
-void addQuad( MeshDesc &mesh, const Vec3 &a, const Vec3 &b, const Vec3 &c, const Vec3 &d,
-              const Vec3 &normal )
+void addQuad( MeshDesc &mesh, const Vec3 &a, const Vec3 &b, const Vec3 &c, const Vec3 &d, const Vec3 &normal )
 {
     const uint16_t base = static_cast<uint16_t>( mesh.vertices.size() );
 
@@ -20,10 +19,13 @@ void addQuad( MeshDesc &mesh, const Vec3 &a, const Vec3 &b, const Vec3 &c, const
     mesh.vertices.push_back( { d, normal, { 0.0f, 0.0f } } );
 
     mesh.indices.insert( mesh.indices.end(), {
-        static_cast<uint16_t>( base + 0 ), static_cast<uint16_t>( base + 1 ),
-        static_cast<uint16_t>( base + 2 ), static_cast<uint16_t>( base + 2 ),
-        static_cast<uint16_t>( base + 3 ), static_cast<uint16_t>( base + 0 ),
-    } );
+                                                 static_cast<uint16_t>( base + 0 ),
+                                                 static_cast<uint16_t>( base + 1 ),
+                                                 static_cast<uint16_t>( base + 2 ),
+                                                 static_cast<uint16_t>( base + 2 ),
+                                                 static_cast<uint16_t>( base + 3 ),
+                                                 static_cast<uint16_t>( base + 0 ),
+                                             } );
 }
 
 }  // namespace

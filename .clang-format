@@ -1,0 +1,47 @@
+# Ogre-Next's own style (Rhiza's already matched it), except that namespace
+# contents are not indented. Format with the version pinned in
+# tools/requirements.txt - other versions format differently.
+---
+BasedOnStyle: Google
+AlignAfterOpenBracket: Align
+AlignEscapedNewlines: DontAlign
+AllowAllConstructorInitializersOnNextLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: 'false'
+AllowShortLoopsOnASingleLine: 'false'
+BinPackParameters: 'true'
+BreakBeforeBraces: Custom
+ColumnLimit: '110'
+ConstructorInitializerAllOnOneLineOrOnePerLine: 'true'
+BreakConstructorInitializers: 'AfterColon'
+ConstructorInitializerIndentWidth: '4'
+ContinuationIndentWidth: '4'
+Cpp11BracedListStyle: 'false'
+DerivePointerAlignment: 'false'
+IncludeBlocks: 'Preserve'
+IndentCaseLabels: 'false'
+IndentWidth: '4'
+NamespaceIndentation: None
+PointerAlignment: Right
+SpaceBeforeParens: Never
+SpaceInEmptyParentheses: 'false'
+SpacesInParentheses: 'true'
+TabWidth: '4'
+UseTab: Never
+AccessModifierOffset: '-4'
+IndentPPDirectives: 'AfterHash'
+BraceWrapping:
+  AfterCaseLabel:  true
+  AfterClass:      true
+  AfterControlStatement: true
+  AfterEnum:       true
+  AfterFunction:   true
+  AfterNamespace:  true
+  AfterObjCDeclaration: true
+  AfterStruct:     true
+  AfterUnion:      true
+  BeforeCatch:     true
+  BeforeElse:      true
+  IndentBraces:    false
+
+...

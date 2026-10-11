@@ -87,10 +87,7 @@ public:
                mDenseEntities[mSparse[entity.index]] == entity;
     }
 
-    T *get( Entity entity )
-    {
-        return contains( entity ) ? &mDense[mSparse[entity.index]] : nullptr;
-    }
+    T *get( Entity entity ) { return contains( entity ) ? &mDense[mSparse[entity.index]] : nullptr; }
 
     const T *get( Entity entity ) const
     {
@@ -168,7 +165,9 @@ public:
     {
     public:
         Iterator( detail::ComponentPool<A> &a, detail::ComponentPool<B> &b, size_t index ) :
-            mA( a ), mB( b ), mIndex( index )
+            mA( a ),
+            mB( b ),
+            mIndex( index )
         {
             skipToMatch();
         }
@@ -319,7 +318,7 @@ private:
     {
         auto it = mPools.find( std::type_index( typeid( T ) ) );
         return it == mPools.end() ? nullptr
-                                   : static_cast<const detail::ComponentPool<T> *>( it->second.get() );
+                                  : static_cast<const detail::ComponentPool<T> *>( it->second.get() );
     }
 
     template <typename T>

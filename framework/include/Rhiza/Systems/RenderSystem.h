@@ -16,9 +16,8 @@ namespace Rhiza
 // the mesh and material are shared, so they stay.
 inline void connectRenderSystem( Registry &registry, Engine &engine )
 {
-    registry.onRemove<MeshRenderer>( [&engine]( Entity, MeshRenderer &renderer ) {
-        engine.destroyInstance( renderer.instance );
-    } );
+    registry.onRemove<MeshRenderer>(
+        [&engine]( Entity, MeshRenderer &renderer ) { engine.destroyInstance( renderer.instance ); } );
 }
 
 // The ECS owns transforms; Ogre's scene nodes only mirror them. Pushes

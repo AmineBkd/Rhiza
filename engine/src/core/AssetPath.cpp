@@ -13,8 +13,7 @@ namespace
 
 bool equalsIgnoringCase( const std::string &a, const std::string &b )
 {
-    return a.size() == b.size() &&
-           std::equal( a.begin(), a.end(), b.begin(), []( char x, char y ) {
+    return a.size() == b.size() && std::equal( a.begin(), a.end(), b.begin(), []( char x, char y ) {
                return std::tolower( static_cast<unsigned char>( x ) ) ==
                       std::tolower( static_cast<unsigned char>( y ) );
            } );

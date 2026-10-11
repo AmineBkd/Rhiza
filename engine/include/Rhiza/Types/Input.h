@@ -10,6 +10,7 @@ namespace Rhiza
 // Extending the list is one line here plus one in Window.cpp's table.
 enum class Key
 {
+    // clang-format off
     Unknown = 0,
 
     A, B, C, D, E, F, G, H, I, J, K, L, M,
@@ -27,6 +28,7 @@ enum class Key
 
     // Sizes Input's storage, so it can't go stale.
     Count
+    // clang-format on
 };
 
 }  // namespace Rhiza

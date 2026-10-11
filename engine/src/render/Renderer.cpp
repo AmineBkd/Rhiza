@@ -8,36 +8,36 @@
 #include <cstring>
 #include <string>
 
-#include "OgreRoot.h"
-#include "OgreAbiUtils.h"
-#include "OgreRenderSystem.h"
-#include "OgreWindow.h"
-#include "OgreSceneManager.h"
-#include "OgreSceneNode.h"
-#include "OgreCamera.h"
-#include "OgreItem.h"
-#include "OgreSubItem.h"
-#include "OgreMesh2.h"
-#include "OgreSubMesh2.h"
-#include "OgreMeshManager2.h"
-#include "OgreHlmsManager.h"
-#include "OgreHlmsCommon.h"
-#include "OgreArchiveManager.h"
-#include "OgreLogManager.h"
 #include "Compositor/OgreCompositorManager2.h"
 #include "Compositor/OgreCompositorWorkspace.h"
-#include "Vao/OgreVaoManager.h"
-#include "Vao/OgreVertexArrayObject.h"
-#include "OgreLight.h"
-#include "OgreImage2.h"
-#include "OgreTextureGpu.h"
-#include "OgreTextureGpuManager.h"
-#include "OgreTextureFilters.h"
-#include "OgreHlmsSamplerblock.h"
-#include "Hlms/Unlit/OgreHlmsUnlit.h"
-#include "Hlms/Unlit/OgreHlmsUnlitDatablock.h"
 #include "Hlms/Pbs/OgreHlmsPbs.h"
 #include "Hlms/Pbs/OgreHlmsPbsDatablock.h"
+#include "Hlms/Unlit/OgreHlmsUnlit.h"
+#include "Hlms/Unlit/OgreHlmsUnlitDatablock.h"
+#include "OgreAbiUtils.h"
+#include "OgreArchiveManager.h"
+#include "OgreCamera.h"
+#include "OgreHlmsCommon.h"
+#include "OgreHlmsManager.h"
+#include "OgreHlmsSamplerblock.h"
+#include "OgreImage2.h"
+#include "OgreItem.h"
+#include "OgreLight.h"
+#include "OgreLogManager.h"
+#include "OgreMesh2.h"
+#include "OgreMeshManager2.h"
+#include "OgreRenderSystem.h"
+#include "OgreRoot.h"
+#include "OgreSceneManager.h"
+#include "OgreSceneNode.h"
+#include "OgreSubItem.h"
+#include "OgreSubMesh2.h"
+#include "OgreTextureFilters.h"
+#include "OgreTextureGpu.h"
+#include "OgreTextureGpuManager.h"
+#include "OgreWindow.h"
+#include "Vao/OgreVaoManager.h"
+#include "Vao/OgreVertexArrayObject.h"
 
 // Injected by engine/CMakeLists.txt. RHIZA_MEDIA_DIR is the folder holding
 // this engine's own copy of the Hlms shader templates (see engine/media);
@@ -106,8 +106,8 @@ std::string getRenderSystemPluginPath()
     const std::string debugSuffix;
 #endif
 
-    return std::string( RHIZA_OGRE_INSTALL_ROOT ) + "/" + dir + "/" + kPluginBaseName +
-           debugSuffix + libExtension;
+    return std::string( RHIZA_OGRE_INSTALL_ROOT ) + "/" + dir + "/" + kPluginBaseName + debugSuffix +
+           libExtension;
 }
 
 // The exact byte layout uploaded to the GPU. Field order must stay in sync
@@ -121,8 +121,7 @@ struct GpuVertex
 
 GpuVertex toGpuVertex( const Vertex &v )
 {
-    return { v.position.x, v.position.y, v.position.z, v.normal.x, v.normal.y, v.normal.z,
-             v.uv.x,       v.uv.y };
+    return { v.position.x, v.position.y, v.position.z, v.normal.x, v.normal.y, v.normal.z, v.uv.x, v.uv.y };
 }
 
 // A CPU-side buffer of data on its way to the GPU, freed when it leaves
@@ -138,8 +137,7 @@ class ScopedUploadBuffer
 {
 public:
     explicit ScopedUploadBuffer( size_t count ) :
-        mPtr( static_cast<T *>(
-            OGRE_MALLOC_SIMD( sizeof( T ) * count, Ogre::MEMCATEGORY_GEOMETRY ) ) )
+        mPtr( static_cast<T *>( OGRE_MALLOC_SIMD( sizeof( T ) * count, Ogre::MEMCATEGORY_GEOMETRY ) ) )
     {
     }
 
@@ -183,9 +181,8 @@ std::string findMeshProblem( const MeshDesc &desc )
     {
         if( desc.indices[i] >= vertexCount )
         {
-            return "index " + std::to_string( i ) + " refers to vertex " +
-                   std::to_string( desc.indices[i] ) + ", but there are only " +
-                   std::to_string( vertexCount );
+            return "index " + std::to_string( i ) + " refers to vertex " + std::to_string( desc.indices[i] ) +
+                   ", but there are only " + std::to_string( vertexCount );
         }
     }
 
@@ -234,8 +231,7 @@ Ogre::VertexArrayObject *buildVao( const MeshDesc &desc, Ogre::VaoManager *vaoMa
 
         Ogre::VertexBufferPackedVec vertexBuffers;
         vertexBuffers.push_back( vertexBuffer );
-        return vaoManager->createVertexArrayObject( vertexBuffers, indexBuffer,
-                                                     Ogre::OT_TRIANGLE_LIST );
+        return vaoManager->createVertexArrayObject( vertexBuffers, indexBuffer, Ogre::OT_TRIANGLE_LIST );
     }
     catch( Ogre::Exception & )
     {
@@ -281,8 +277,7 @@ bool topologyUnchanged( const Ogre::VertexArrayObject *vao, const MeshDesc &desc
 {
     const Ogre::VertexBufferPackedVec &vertexBuffers = vao->getVertexBuffers();
     return vertexBuffers.size() == 1 && vertexBuffers[0]->getNumElements() == desc.vertices.size() &&
-           vao->getIndexBuffer() != nullptr &&
-           vao->getIndexBuffer()->getNumElements() == desc.indices.size();
+           vao->getIndexBuffer() != nullptr && vao->getIndexBuffer()->getNumElements() == desc.indices.size();
 }
 
 void reuploadGeometry( Ogre::VertexArrayObject *vao, const MeshDesc &desc )
@@ -402,8 +397,7 @@ bool Renderer::initialize( const NativeWindowHandle &windowHandle, const EngineS
     }
 }
 
-bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
-                                   const EngineSettings &settings )
+bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle, const EngineSettings &settings )
 {
     const std::string title = settings.windowTitle;
 
@@ -421,7 +415,7 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
     if( !renderSystem )
     {
         logError( "render", std::string( "render system '" ) + kRenderSystemName +
-                  "' was not found after loading " + getRenderSystemPluginPath() );
+                                "' was not found after loading " + getRenderSystemPluginPath() );
         return false;
     }
 
@@ -439,8 +433,7 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle,
 
     mRenderWindow =
         mRoot->createRenderWindow( title, static_cast<Ogre::uint32>( settings.windowWidth ),
-                                   static_cast<Ogre::uint32>( settings.windowHeight ), false,
-                                   &params );
+                                   static_cast<Ogre::uint32>( settings.windowHeight ), false, &params );
 
     registerHlms();
 
@@ -653,7 +646,7 @@ void Renderer::updateMesh( uint32_t handle, const MeshDesc &desc )
         catch( Ogre::Exception &e )
         {
             logError( "render", "updateMesh could not allocate GPU buffers for '" + asset->name +
-                      "': " + e.getDescription() );
+                                    "': " + e.getDescription() );
             return;
         }
     }
@@ -675,7 +668,7 @@ const Renderer::MeshAsset *Renderer::findUpdatableMesh( uint32_t handle, const M
     if( !asset.isMutable )
     {
         logError( "render", "updateMesh called on '" + asset.name +
-                  "', which was not created with MeshDesc::isMutable" );
+                                "', which was not created with MeshDesc::isMutable" );
         return nullptr;
     }
 
@@ -715,7 +708,7 @@ void Renderer::destroyMeshAsset( uint32_t handle )
     if( asset.instanceRefCount != 0 )
     {
         logError( "render", "destroyMeshAsset refused: '" + asset.name + "' still has " +
-                  std::to_string( asset.instanceRefCount ) + " instance(s) referencing it" );
+                                std::to_string( asset.instanceRefCount ) + " instance(s) referencing it" );
         return;
     }
 
@@ -744,8 +737,8 @@ uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std
     Ogre::Image2 *image = new Ogre::Image2();
     try
     {
-        Ogre::DataStreamPtr stream( OGRE_NEW Ogre::MemoryDataStream(
-            const_cast<uint8_t *>( encoded.data() ), encoded.size(), false, true ) );
+        Ogre::DataStreamPtr stream( OGRE_NEW Ogre::MemoryDataStream( const_cast<uint8_t *>( encoded.data() ),
+                                                                     encoded.size(), false, true ) );
         image->load2( stream, cacheKey );
     }
     catch( Ogre::Exception &e )
@@ -755,9 +748,8 @@ uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std
         return 0;
     }
 
-    const Ogre::uint32 filters = desc.filter == TextureFilter::Linear
-                                     ? Ogre::TextureFilter::TypeGenerateDefaultMipmaps
-                                     : 0u;
+    const Ogre::uint32 filters =
+        desc.filter == TextureFilter::Linear ? Ogre::TextureFilter::TypeGenerateDefaultMipmaps : 0u;
 
     // Not sRGB: the backbuffer isn't either, so pixels come out as authored.
     const std::string alias = textureCacheKey( cacheKey, desc );
@@ -800,7 +792,7 @@ void Renderer::destroyTexture( uint32_t handle )
     if( asset.materialRefCount != 0 )
     {
         logError( "render", "destroyTexture refused: '" + asset.texture->getNameStr() + "' still has " +
-                  std::to_string( asset.materialRefCount ) + " material(s) referencing it" );
+                                std::to_string( asset.materialRefCount ) + " material(s) referencing it" );
         return;
     }
 
@@ -866,7 +858,8 @@ void Renderer::destroyMaterial( uint32_t handle )
     if( it->second.instanceRefCount != 0 )
     {
         logError( "render", "destroyMaterial refused: still has " +
-                  std::to_string( it->second.instanceRefCount ) + " instance(s) referencing it" );
+                                std::to_string( it->second.instanceRefCount ) +
+                                " instance(s) referencing it" );
         return;
     }
 
@@ -981,8 +974,7 @@ void Renderer::setTransform( uint32_t handle, const Transform &transform )
     node->setScale( toOgre( transform.scale ) );
 }
 
-Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
-                                                const MaterialDesc &material,
+Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name, const MaterialDesc &material,
                                                 const TextureAsset *texture )
 {
     // Culling stays off unless the material opts in, since winding is only
@@ -1009,9 +1001,8 @@ Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
         Ogre::HlmsUnlit *hlmsUnlit =
             static_cast<Ogre::HlmsUnlit *>( hlmsManager->getHlms( Ogre::HLMS_UNLIT ) );
 
-        Ogre::HlmsUnlitDatablock *datablock =
-            static_cast<Ogre::HlmsUnlitDatablock *>( hlmsUnlit->createDatablock(
-                name, name, macroblock, blendblock, Ogre::HlmsParamVec() ) );
+        Ogre::HlmsUnlitDatablock *datablock = static_cast<Ogre::HlmsUnlitDatablock *>(
+            hlmsUnlit->createDatablock( name, name, macroblock, blendblock, Ogre::HlmsParamVec() ) );
 
         // Unlit ignores its colour entirely unless told to use it.
         datablock->setUseColour( true );
@@ -1023,9 +1014,8 @@ Ogre::HlmsDatablock *Renderer::createDatablock( const std::string &name,
 
     Ogre::HlmsPbs *hlmsPbs = static_cast<Ogre::HlmsPbs *>( hlmsManager->getHlms( Ogre::HLMS_PBS ) );
 
-    Ogre::HlmsPbsDatablock *datablock =
-        static_cast<Ogre::HlmsPbsDatablock *>( hlmsPbs->createDatablock(
-            name, name, macroblock, blendblock, Ogre::HlmsParamVec() ) );
+    Ogre::HlmsPbsDatablock *datablock = static_cast<Ogre::HlmsPbsDatablock *>(
+        hlmsPbs->createDatablock( name, name, macroblock, blendblock, Ogre::HlmsParamVec() ) );
 
     // setMetalness is only respected under the metallic workflow; in the
     // default specular workflow it is silently ignored.
@@ -1109,8 +1099,7 @@ void Renderer::setAmbientLight( const Color &skyColor, const Color &groundColor 
 {
     // Ogre models ambient as two hemispheres blended along an axis: light
     // bouncing down from the sky and up off the ground.
-    mSceneManager->setAmbientLight( toOgre( skyColor ), toOgre( groundColor ),
-                                    Ogre::Vector3::UNIT_Y );
+    mSceneManager->setAmbientLight( toOgre( skyColor ), toOgre( groundColor ), Ogre::Vector3::UNIT_Y );
 }
 
 void Renderer::setCamera( Vec3 position, Vec3 target )

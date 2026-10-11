@@ -214,7 +214,9 @@ struct Audio::Impl
     }
 };
 
-Audio::Audio() : mImpl( std::make_unique<Impl>() ) {}
+Audio::Audio() : mImpl( std::make_unique<Impl>() )
+{
+}
 
 Audio::~Audio()
 {
@@ -287,7 +289,8 @@ void Audio::mix( float *out, uint32_t frameCount )
     if( mImpl->initialised )
         ma_engine_read_pcm_frames( &mImpl->engine, out, frameCount, &framesRead );
     if( framesRead < frameCount )
-        std::memset( out + framesRead * kChannels, 0, ( frameCount - framesRead ) * kChannels * sizeof( float ) );
+        std::memset( out + framesRead * kChannels, 0,
+                     ( frameCount - framesRead ) * kChannels * sizeof( float ) );
 }
 
 uint32_t Audio::createSound( const std::vector<uint8_t> &encoded, const std::string &cacheKey,
@@ -321,8 +324,10 @@ uint32_t Audio::createSound( const std::vector<uint8_t> &encoded, const std::str
     for( ;; )
     {
         ma_uint64 framesRead = 0;
-        const ma_result result = ma_decoder_read_pcm_frames( &decoder, chunk.data(), kDecodeChunkFrames, &framesRead );
-        sound.samples.insert( sound.samples.end(), chunk.begin(), chunk.begin() + framesRead * sound.channels );
+        const ma_result result =
+            ma_decoder_read_pcm_frames( &decoder, chunk.data(), kDecodeChunkFrames, &framesRead );
+        sound.samples.insert( sound.samples.end(), chunk.begin(),
+                              chunk.begin() + framesRead * sound.channels );
         if( result != MA_SUCCESS || framesRead == 0 )
             break;
     }
@@ -490,7 +495,8 @@ bool Audio::playMusic( std::vector<uint8_t> encoded, float fadeInSeconds, std::s
     next.encoded = std::move( encoded );
 
     ma_decoder_config config = ma_decoder_config_init( ma_format_f32, kChannels, kSampleRate );
-    if( ma_decoder_init_memory( next.encoded.data(), next.encoded.size(), &config, &next.decoder ) != MA_SUCCESS )
+    if( ma_decoder_init_memory( next.encoded.data(), next.encoded.size(), &config, &next.decoder ) !=
+        MA_SUCCESS )
     {
         next.encoded.clear();
         error = "it is not a WAV, MP3, FLAC or Ogg Vorbis file";

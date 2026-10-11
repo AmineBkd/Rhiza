@@ -20,7 +20,10 @@
 namespace
 {
 
-bool near( float a, float b ) { return std::fabs( a - b ) < 1e-4f; }
+bool near( float a, float b )
+{
+    return std::fabs( a - b ) < 1e-4f;
+}
 
 std::string base64( const std::vector<uint8_t> &bytes )
 {
@@ -51,10 +54,10 @@ void appendFloats( std::vector<uint8_t> &out, std::initializer_list<float> value
 // One triangle, (0,0,0) (1,0,0) (0,1,0): counter-clockwise seen from +Z.
 struct Triangle
 {
-    std::string nodeTransform;        // e.g. "\"translation\":[5,0,0]"
-    const float *normal = nullptr;    // same normal on all three vertices
+    std::string nodeTransform;      // e.g. "\"translation\":[5,0,0]"
+    const float *normal = nullptr;  // same normal on all three vertices
     bool indexed = true;
-    int mode = 4;                     // 4 = triangles, 0 = points
+    int mode = 4;  // 4 = triangles, 0 = points
 
     std::vector<uint8_t> binary() const
     {
@@ -82,7 +85,8 @@ struct Triangle
         if( normal )
         {
             attributes += ",\"NORMAL\":1";
-            views += ",{\"buffer\":0,\"byteOffset\":" + std::to_string( normalOffset ) + ",\"byteLength\":36}";
+            views +=
+                ",{\"buffer\":0,\"byteOffset\":" + std::to_string( normalOffset ) + ",\"byteLength\":36}";
             accessors += ",{\"bufferView\":1,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}";
             nextAccessor = 2;
         }
@@ -91,7 +95,8 @@ struct Triangle
         {
             const std::string view = std::to_string( nextAccessor );
             views += ",{\"buffer\":0,\"byteOffset\":" + std::to_string( indexOffset ) + ",\"byteLength\":6}";
-            accessors += ",{\"bufferView\":" + view + ",\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"}";
+            accessors +=
+                ",{\"bufferView\":" + view + ",\"componentType\":5123,\"count\":3,\"type\":\"SCALAR\"}";
             primitive += ",\"indices\":" + view;
         }
         primitive += "}";
@@ -107,9 +112,14 @@ struct Triangle
         node += "}";
 
         return "{\"asset\":{\"version\":\"2.0\"},\"scene\":0,\"scenes\":[{\"nodes\":[0]}],"
-               "\"nodes\":[" + node + "],\"meshes\":[{\"primitives\":[" + primitive + "]}],"
-               "\"buffers\":[" + buffer + "],\"bufferViews\":[" + views + "],"
-               "\"accessors\":[" + accessors + "]}";
+               "\"nodes\":[" +
+               node + "],\"meshes\":[{\"primitives\":[" + primitive +
+               "]}],"
+               "\"buffers\":[" +
+               buffer + "],\"bufferViews\":[" + views +
+               "],"
+               "\"accessors\":[" +
+               accessors + "]}";
     }
 
     std::vector<uint8_t> embeddedGltf() const
@@ -272,7 +282,7 @@ TEST_CASE( "Assets: texture keys: settings are part of identity" )
     CHECK( Rhiza::textureCacheKey( "ship.png", linear ) != Rhiza::textureCacheKey( "ship.png", nearest ) );
     CHECK( Rhiza::textureCacheKey( "ship.png", linear ) != Rhiza::textureCacheKey( "ship.png", repeating ) );
     CHECK( Rhiza::textureCacheKey( Rhiza::normalizeAssetPath( "./textures//ship.png" ), linear ) ==
-               Rhiza::textureCacheKey( Rhiza::normalizeAssetPath( "textures/ship.png" ), linear ) );
+           Rhiza::textureCacheKey( Rhiza::normalizeAssetPath( "textures/ship.png" ), linear ) );
 }
 
 TEST_CASE( "Assets: embedded triangle" )
@@ -353,7 +363,8 @@ TEST_CASE( "Assets: external buffer goes through the reader" )
     };
     Rhiza::MeshDesc mesh;
     std::string error;
-    CHECK( parse( std::vector<uint8_t>( text.begin(), text.end() ), mesh, error, reader, "models/tri.gltf" ) );
+    CHECK(
+        parse( std::vector<uint8_t>( text.begin(), text.end() ), mesh, error, reader, "models/tri.gltf" ) );
     CHECK( requested == "models/tri.bin" );
     CHECK( mesh.vertices.size() == 3 );
 }

@@ -17,8 +17,7 @@ Quat Quat::fromAxisAngle( Vec3 axis, float radians )
 Vec3 Quat::rotate( Vec3 v ) const
 {
     const Vec3 t{ 2.0f * ( y * v.z - z * v.y ), 2.0f * ( z * v.x - x * v.z ), 2.0f * ( x * v.y - y * v.x ) };
-    return { v.x + w * t.x + ( y * t.z - z * t.y ),
-             v.y + w * t.y + ( z * t.x - x * t.z ),
+    return { v.x + w * t.x + ( y * t.z - z * t.y ), v.y + w * t.y + ( z * t.x - x * t.z ),
              v.z + w * t.z + ( x * t.y - y * t.x ) };
 }
 

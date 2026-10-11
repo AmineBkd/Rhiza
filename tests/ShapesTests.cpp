@@ -25,9 +25,8 @@ void checkIndicesInRange( const Rhiza::MeshDesc &mesh, const std::string &name )
     {
         if( mesh.indices[i] >= mesh.vertices.size() )
         {
-            FAIL_CHECK( name + ": index " + std::to_string( i ) + " is " +
-                              std::to_string( mesh.indices[i] ) + ", past " +
-                              std::to_string( mesh.vertices.size() ) + " vertices" );
+            FAIL_CHECK( name + ": index " + std::to_string( i ) + " is " + std::to_string( mesh.indices[i] ) +
+                        ", past " + std::to_string( mesh.vertices.size() ) + " vertices" );
             return;
         }
     }
@@ -43,8 +42,8 @@ void checkNormalsAreUnitLength( const Rhiza::MeshDesc &mesh, const std::string &
         const float length = std::sqrt( n.x * n.x + n.y * n.y + n.z * n.z );
         if( std::fabs( length - 1.0f ) > 1e-5f )
         {
-            FAIL_CHECK( name + ": normal " + std::to_string( i ) + " has length " +
-                              std::to_string( length ) + ", expected 1" );
+            FAIL_CHECK( name + ": normal " + std::to_string( i ) + " has length " + std::to_string( length ) +
+                        ", expected 1" );
             return;
         }
     }
@@ -93,8 +92,7 @@ TEST_CASE( "Shapes: cube" )
         int matches = 0;
         for( const Rhiza::Vertex &v : cube.vertices )
         {
-            if( std::fabs( v.normal.x - want.x ) < 1e-5f &&
-                std::fabs( v.normal.y - want.y ) < 1e-5f &&
+            if( std::fabs( v.normal.x - want.x ) < 1e-5f && std::fabs( v.normal.y - want.y ) < 1e-5f &&
                 std::fabs( v.normal.z - want.z ) < 1e-5f )
             {
                 ++matches;
@@ -149,7 +147,6 @@ TEST_CASE( "Shapes: quad" )
 
 TEST_CASE( "Shapes: scaling" )
 {
-
     // A size of 0 is degenerate but must not produce indices that point
     // nowhere - the renderer would happily upload it.
     const Rhiza::MeshDesc degenerate = Rhiza::Shapes::cube( 0.0f );

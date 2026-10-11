@@ -12,473 +12,475 @@
 #include "platform/Input.h"
 #include "platform/LogOutputs.h"
 #include "platform/PlatformLifetime.h"
-#include "render/Renderer.h"
 #include "platform/Window.h"
+#include "render/Renderer.h"
 
 namespace Rhiza
 {
-    struct Engine::Impl
+struct Engine::Impl
+{
+    PlatformLifetime platform;  // first, so it is destroyed last
+    LogOutputs logOutputs;      // outlives everything that logs
+    Window window;
+    Renderer renderer;
+    Input input;
+    Clock clock;
+    Audio audio;
+    AudioOutput audioOutput;
+    std::string assetRoot;
+    bool running = false;
+    bool listenerFollowsCamera = true;
+
+    // Loads anyway: the spelling works on this file system, just not on
+    // case-sensitive ones.
+    void warnIfCaseDiffers( const std::string &cacheKey )
     {
-        PlatformLifetime platform;  // first, so it is destroyed last
-        LogOutputs logOutputs;      // outlives everything that logs
-        Window window;
-        Renderer renderer;
-        Input input;
-        Clock clock;
-        Audio audio;
-        AudioOutput audioOutput;
-        std::string assetRoot;
-        bool running = false;
-        bool listenerFollowsCamera = true;
-
-        // Loads anyway: the spelling works on this file system, just not on
-        // case-sensitive ones.
-        void warnIfCaseDiffers( const std::string &cacheKey )
-        {
-            const std::string spelledOnDisk = findCaseMismatch( assetRoot, cacheKey );
-            if( !spelledOnDisk.empty() )
-                logWarning( "assets", "asset '" + cacheKey + "' is spelled '" + spelledOnDisk +
-                                        "' on disk. It loads here, but asset paths are "
-                                        "case-sensitive, so it will fail on Linux and Android." );
-        }
-
-        bool readAsset( const std::string &cacheKey, std::vector<uint8_t> &bytes )
-        {
-            if( !readFile( joinAssetPath( assetRoot, cacheKey ), bytes ) )
-                return false;
-            warnIfCaseDiffers( cacheKey );
-            return true;
-        }
-
-        SoundHandle loadSound( const char *path, uint32_t maxCopies )
-        {
-            const std::string cacheKey = normalizeAssetPath( path );
-            SoundHandle handle;
-            handle.id = audio.acquireCachedSound( cacheKey );
-            if( handle.isValid() )
-            {
-                if( maxCopies > 0 )
-                    audio.setMaxCopies( handle.id, maxCopies );
-                return handle;
-            }
-
-            std::vector<uint8_t> bytes;
-            if( !readAsset( cacheKey, bytes ) )
-                return handle;
-            std::string error;
-            handle.id = audio.createSound( bytes, cacheKey, maxCopies, error );
-            if( !handle.isValid() )
-                logError( "audio", "loadSound rejected '" + cacheKey + "' because " + error );
-            return handle;
-        }
-
-        // An orthographic camera's height says nothing about zoom; its view
-        // height does. Half of it puts the ears just above the play plane
-        // (z = 0) at normal zoom, and far enough away to quieten everything
-        // when zoomed far out.
-        static constexpr float kOrthoListenerHeightPerViewHeight = 0.5f;
-
-        void listenFrom( const CameraDesc &camera )
-        {
-            Vec3 position = camera.position;
-            if( camera.projection == Projection::Orthographic )
-                position.z = camera.orthoHeight * kOrthoListenerHeightPerViewHeight;
-            audio.setListener( position, camera.orientation.rotate( { 0.0f, 0.0f, -1.0f } ),
-                               camera.orientation.rotate( { 0.0f, 1.0f, 0.0f } ), {} );
-        }
-
-        void listenFrom( Vec3 position, Vec3 target )
-        {
-            audio.setListener( position, normalized( target - position ), { 0.0f, 1.0f, 0.0f }, {} );
-        }
-    };
-
-    Engine::Engine() = default;
-
-    Engine::~Engine() {
-        shutdown();
+        const std::string spelledOnDisk = findCaseMismatch( assetRoot, cacheKey );
+        if( !spelledOnDisk.empty() )
+            logWarning( "assets", "asset '" + cacheKey + "' is spelled '" + spelledOnDisk +
+                                      "' on disk. It loads here, but asset paths are "
+                                      "case-sensitive, so it will fail on Linux and Android." );
     }
 
-    bool Engine::initialize( const EngineSettings &settings )
+    bool readAsset( const std::string &cacheKey, std::vector<uint8_t> &bytes )
     {
-        mImpl = std::make_unique<Impl>();
-        mImpl->logOutputs.attach( settings.organization, settings.application );
-
-        if( !mImpl->window.initialize( settings.windowTitle, settings.windowWidth, settings.windowHeight ) )
-        {
-            mImpl.reset();
+        if( !readFile( joinAssetPath( assetRoot, cacheKey ), bytes ) )
             return false;
-        }
-
-        const NativeWindowHandle handle = mImpl->window.getNativeHandle();
-        if( !mImpl->renderer.initialize( handle, settings ) )
-        {
-            mImpl->window.shutdown();
-            mImpl.reset();
-            return false;
-        }
-
-        mImpl->assetRoot = settings.assetRoot ? settings.assetRoot : defaultAssetRoot();
-
-        // A missing or broken sound device leaves the game running silent.
-        const auto toCount = []( int value ) { return static_cast<uint32_t>( std::max( value, 0 ) ); };
-        Audio *audio = &mImpl->audio;
-        const bool audioStarted =
-            audio->initialize( toCount( settings.monoSoundSlots ), toCount( settings.stereoSoundSlots ),
-                               toCount( settings.defaultMaxCopies ) ) &&
-            mImpl->audioOutput.start( Audio::kSampleRate, Audio::kChannels,
-                                      [audio]( float *frames, int frameCount ) {
-                                          audio->mix( frames, static_cast<uint32_t>( frameCount ) );
-                                      } );
-        if( audioStarted )
-        {
-            mImpl->listenFrom( settings.cameraPosition, settings.cameraTarget );
-        }
-        else
-        {
-            // With no device pulling the mix, voices would never finish and
-            // fill every slot.
-            audio->shutdown();
-            logWarning( "audio", "audio could not start; the game will run silent" );
-        }
-
-        mImpl->running = true;
+        warnIfCaseDiffers( cacheKey );
         return true;
     }
 
-    void Engine::shutdown()
+    SoundHandle loadSound( const char *path, uint32_t maxCopies )
     {
-        if( !mImpl )
-            return;
+        const std::string cacheKey = normalizeAssetPath( path );
+        SoundHandle handle;
+        handle.id = audio.acquireCachedSound( cacheKey );
+        if( handle.isValid() )
+        {
+            if( maxCopies > 0 )
+                audio.setMaxCopies( handle.id, maxCopies );
+            return handle;
+        }
 
-        // Output first: its callback reads from the mixer.
-        mImpl->audioOutput.stop();
-        mImpl->audio.shutdown();
-        mImpl->renderer.shutdown();
+        std::vector<uint8_t> bytes;
+        if( !readAsset( cacheKey, bytes ) )
+            return handle;
+        std::string error;
+        handle.id = audio.createSound( bytes, cacheKey, maxCopies, error );
+        if( !handle.isValid() )
+            logError( "audio", "loadSound rejected '" + cacheKey + "' because " + error );
+        return handle;
+    }
+
+    // An orthographic camera's height says nothing about zoom; its view
+    // height does. Half of it puts the ears just above the play plane
+    // (z = 0) at normal zoom, and far enough away to quieten everything
+    // when zoomed far out.
+    static constexpr float kOrthoListenerHeightPerViewHeight = 0.5f;
+
+    void listenFrom( const CameraDesc &camera )
+    {
+        Vec3 position = camera.position;
+        if( camera.projection == Projection::Orthographic )
+            position.z = camera.orthoHeight * kOrthoListenerHeightPerViewHeight;
+        audio.setListener( position, camera.orientation.rotate( { 0.0f, 0.0f, -1.0f } ),
+                           camera.orientation.rotate( { 0.0f, 1.0f, 0.0f } ), {} );
+    }
+
+    void listenFrom( Vec3 position, Vec3 target )
+    {
+        audio.setListener( position, normalized( target - position ), { 0.0f, 1.0f, 0.0f }, {} );
+    }
+};
+
+Engine::Engine() = default;
+
+Engine::~Engine()
+{
+    shutdown();
+}
+
+bool Engine::initialize( const EngineSettings &settings )
+{
+    mImpl = std::make_unique<Impl>();
+    mImpl->logOutputs.attach( settings.organization, settings.application );
+
+    if( !mImpl->window.initialize( settings.windowTitle, settings.windowWidth, settings.windowHeight ) )
+    {
+        mImpl.reset();
+        return false;
+    }
+
+    const NativeWindowHandle handle = mImpl->window.getNativeHandle();
+    if( !mImpl->renderer.initialize( handle, settings ) )
+    {
         mImpl->window.shutdown();
         mImpl.reset();
+        return false;
     }
 
-    bool Engine::beginFrame()
+    mImpl->assetRoot = settings.assetRoot ? settings.assetRoot : defaultAssetRoot();
+
+    // A missing or broken sound device leaves the game running silent.
+    const auto toCount = []( int value ) { return static_cast<uint32_t>( std::max( value, 0 ) ); };
+    Audio *audio = &mImpl->audio;
+    const bool audioStarted =
+        audio->initialize( toCount( settings.monoSoundSlots ), toCount( settings.stereoSoundSlots ),
+                           toCount( settings.defaultMaxCopies ) ) &&
+        mImpl->audioOutput.start( Audio::kSampleRate, Audio::kChannels,
+                                  [audio]( float *frames, int frameCount ) {
+                                      audio->mix( frames, static_cast<uint32_t>( frameCount ) );
+                                  } );
+    if( audioStarted )
     {
-        if( !mImpl || !mImpl->running )
-            return false;
-
-        // Measures the previous whole iteration - the conventional meaning
-        // of "this frame's delta time".
-        mImpl->clock.tick();
-
-        if( !mImpl->window.pollEvents( mImpl->input ) )
-        {
-            mImpl->running = false;
-            return false;
-        }
-
-        // Stop the loop rather than render into a dead device or a frame
-        // that keeps throwing. The game asks deviceLost() and renderFailed()
-        // afterwards to tell either apart from the user closing the window.
-        if( mImpl->renderer.isDeviceLost() || mImpl->renderer.hasRenderFailed() )
-        {
-            mImpl->running = false;
-            return false;
-        }
-
-        return true;
+        mImpl->listenFrom( settings.cameraPosition, settings.cameraTarget );
+    }
+    else
+    {
+        // With no device pulling the mix, voices would never finish and
+        // fill every slot.
+        audio->shutdown();
+        logWarning( "audio", "audio could not start; the game will run silent" );
     }
 
-    bool Engine::deviceLost() const
+    mImpl->running = true;
+    return true;
+}
+
+void Engine::shutdown()
+{
+    if( !mImpl )
+        return;
+
+    // Output first: its callback reads from the mixer.
+    mImpl->audioOutput.stop();
+    mImpl->audio.shutdown();
+    mImpl->renderer.shutdown();
+    mImpl->window.shutdown();
+    mImpl.reset();
+}
+
+bool Engine::beginFrame()
+{
+    if( !mImpl || !mImpl->running )
+        return false;
+
+    // Measures the previous whole iteration - the conventional meaning
+    // of "this frame's delta time".
+    mImpl->clock.tick();
+
+    if( !mImpl->window.pollEvents( mImpl->input ) )
     {
-        return mImpl && mImpl->renderer.isDeviceLost();
+        mImpl->running = false;
+        return false;
     }
 
-    bool Engine::renderFailed() const
+    // Stop the loop rather than render into a dead device or a frame
+    // that keeps throwing. The game asks deviceLost() and renderFailed()
+    // afterwards to tell either apart from the user closing the window.
+    if( mImpl->renderer.isDeviceLost() || mImpl->renderer.hasRenderFailed() )
     {
-        return mImpl && mImpl->renderer.hasRenderFailed();
+        mImpl->running = false;
+        return false;
     }
 
-    void Engine::endFrame()
-    {
-        if( mImpl && mImpl->running )
-            mImpl->renderer.renderOneFrame();
-    }
+    return true;
+}
 
-    MeshHandle Engine::createMeshAsset( const MeshDesc &desc )
+bool Engine::deviceLost() const
+{
+    return mImpl && mImpl->renderer.isDeviceLost();
+}
+
+bool Engine::renderFailed() const
+{
+    return mImpl && mImpl->renderer.hasRenderFailed();
+}
+
+void Engine::endFrame()
+{
+    if( mImpl && mImpl->running )
+        mImpl->renderer.renderOneFrame();
+}
+
+MeshHandle Engine::createMeshAsset( const MeshDesc &desc )
+{
+    MeshHandle handle;
+    if( mImpl )
+        handle.id = mImpl->renderer.createMeshAsset( desc );
+    return handle;
+}
+
+void Engine::updateMesh( MeshHandle mesh, const MeshDesc &desc )
+{
+    if( mImpl && mesh.isValid() )
+        mImpl->renderer.updateMesh( mesh.id, desc );
+}
+
+void Engine::destroyMeshAsset( MeshHandle mesh )
+{
+    if( mImpl && mesh.isValid() )
+        mImpl->renderer.destroyMeshAsset( mesh.id );
+}
+
+MeshHandle Engine::loadMesh( const char *path )
+{
+    MeshHandle handle;
+    if( !mImpl )
+        return handle;
+
+    const std::string cacheKey = normalizeAssetPath( path );
+    handle.id = mImpl->renderer.acquireCachedMesh( cacheKey );
+    if( handle.isValid() )
+        return handle;
+
+    const std::string fullPath = joinAssetPath( mImpl->assetRoot, cacheKey );
+    std::vector<uint8_t> bytes;
+    if( !readFile( fullPath, bytes ) )
+        return handle;
+    mImpl->warnIfCaseDiffers( cacheKey );
+
+    MeshDesc desc;
+    std::string error;
+    if( !parseGltfMesh( bytes, fullPath, readFile, desc, error ) )
     {
-        MeshHandle handle;
-        if( mImpl )
-            handle.id = mImpl->renderer.createMeshAsset( desc );
+        logError( "assets", "loadMesh rejected '" + cacheKey + "' because " + error );
         return handle;
     }
 
-    void Engine::updateMesh( MeshHandle mesh, const MeshDesc &desc )
-    {
-        if( mImpl && mesh.isValid() )
-            mImpl->renderer.updateMesh( mesh.id, desc );
-    }
+    handle.id = mImpl->renderer.createMeshAsset( desc, cacheKey );
+    return handle;
+}
 
-    void Engine::destroyMeshAsset( MeshHandle mesh )
-    {
-        if( mImpl && mesh.isValid() )
-            mImpl->renderer.destroyMeshAsset( mesh.id );
-    }
-
-    MeshHandle Engine::loadMesh( const char *path )
-    {
-        MeshHandle handle;
-        if( !mImpl )
-            return handle;
-
-        const std::string cacheKey = normalizeAssetPath( path );
-        handle.id = mImpl->renderer.acquireCachedMesh( cacheKey );
-        if( handle.isValid() )
-            return handle;
-
-        const std::string fullPath = joinAssetPath( mImpl->assetRoot, cacheKey );
-        std::vector<uint8_t> bytes;
-        if( !readFile( fullPath, bytes ) )
-            return handle;
-        mImpl->warnIfCaseDiffers( cacheKey );
-
-        MeshDesc desc;
-        std::string error;
-        if( !parseGltfMesh( bytes, fullPath, readFile, desc, error ) )
-        {
-            logError( "assets", "loadMesh rejected '" + cacheKey + "' because " + error );
-            return handle;
-        }
-
-        handle.id = mImpl->renderer.createMeshAsset( desc, cacheKey );
+TextureHandle Engine::loadTexture( const char *path, const TextureDesc &desc )
+{
+    TextureHandle handle;
+    if( !mImpl )
         return handle;
-    }
 
-    TextureHandle Engine::loadTexture( const char *path, const TextureDesc &desc )
-    {
-        TextureHandle handle;
-        if( !mImpl )
-            return handle;
-
-        const std::string cacheKey = normalizeAssetPath( path );
-        handle.id = mImpl->renderer.acquireCachedTexture( cacheKey, desc );
-        if( handle.isValid() )
-            return handle;
-
-        std::vector<uint8_t> encoded;
-        if( !readFile( joinAssetPath( mImpl->assetRoot, cacheKey ), encoded ) )
-            return handle;
-        mImpl->warnIfCaseDiffers( cacheKey );
-
-        handle.id = mImpl->renderer.createTexture( encoded, cacheKey, desc );
+    const std::string cacheKey = normalizeAssetPath( path );
+    handle.id = mImpl->renderer.acquireCachedTexture( cacheKey, desc );
+    if( handle.isValid() )
         return handle;
-    }
 
-    void Engine::destroyTexture( TextureHandle texture )
-    {
-        if( mImpl && texture.isValid() )
-            mImpl->renderer.destroyTexture( texture.id );
-    }
-
-    MaterialHandle Engine::createMaterial( const MaterialDesc &desc )
-    {
-        MaterialHandle handle;
-        if( mImpl )
-            handle.id = mImpl->renderer.createMaterial( desc );
+    std::vector<uint8_t> encoded;
+    if( !readFile( joinAssetPath( mImpl->assetRoot, cacheKey ), encoded ) )
         return handle;
-    }
+    mImpl->warnIfCaseDiffers( cacheKey );
 
-    void Engine::destroyMaterial( MaterialHandle material )
-    {
-        if( mImpl && material.isValid() )
-            mImpl->renderer.destroyMaterial( material.id );
-    }
+    handle.id = mImpl->renderer.createTexture( encoded, cacheKey, desc );
+    return handle;
+}
 
-    InstanceHandle Engine::createInstance( MeshHandle mesh, MaterialHandle material )
-    {
-        InstanceHandle handle;
-        if( mImpl && mesh.isValid() && material.isValid() )
-            handle.id = mImpl->renderer.createInstance( mesh.id, material.id );
-        return handle;
-    }
+void Engine::destroyTexture( TextureHandle texture )
+{
+    if( mImpl && texture.isValid() )
+        mImpl->renderer.destroyTexture( texture.id );
+}
 
-    void Engine::destroyInstance( InstanceHandle instance )
-    {
-        if( mImpl && instance.isValid() )
-            mImpl->renderer.destroyInstance( instance.id );
-    }
+MaterialHandle Engine::createMaterial( const MaterialDesc &desc )
+{
+    MaterialHandle handle;
+    if( mImpl )
+        handle.id = mImpl->renderer.createMaterial( desc );
+    return handle;
+}
 
-    void Engine::setTransform( InstanceHandle handle, const Transform &transform )
-    {
-        if( mImpl && handle.isValid() )
-            mImpl->renderer.setTransform( handle.id, transform );
-    }
+void Engine::destroyMaterial( MaterialHandle material )
+{
+    if( mImpl && material.isValid() )
+        mImpl->renderer.destroyMaterial( material.id );
+}
 
-    LightHandle Engine::createLight( const LightDesc &desc )
-    {
-        LightHandle handle;
-        if( mImpl )
-            handle.id = mImpl->renderer.createLight( desc );
-        return handle;
-    }
+InstanceHandle Engine::createInstance( MeshHandle mesh, MaterialHandle material )
+{
+    InstanceHandle handle;
+    if( mImpl && mesh.isValid() && material.isValid() )
+        handle.id = mImpl->renderer.createInstance( mesh.id, material.id );
+    return handle;
+}
 
-    void Engine::destroyLight( LightHandle handle )
-    {
-        if( mImpl && handle.isValid() )
-            mImpl->renderer.destroyLight( handle.id );
-    }
+void Engine::destroyInstance( InstanceHandle instance )
+{
+    if( mImpl && instance.isValid() )
+        mImpl->renderer.destroyInstance( instance.id );
+}
 
-    void Engine::setAmbientLight( Color skyColor, Color groundColor )
-    {
-        if( mImpl )
-            mImpl->renderer.setAmbientLight( skyColor, groundColor );
-    }
+void Engine::setTransform( InstanceHandle handle, const Transform &transform )
+{
+    if( mImpl && handle.isValid() )
+        mImpl->renderer.setTransform( handle.id, transform );
+}
 
-    void Engine::setCamera( Vec3 position, Vec3 target )
-    {
-        if( !mImpl )
-            return;
-        mImpl->renderer.setCamera( position, target );
-        if( mImpl->listenerFollowsCamera )
-            mImpl->listenFrom( position, target );
-    }
+LightHandle Engine::createLight( const LightDesc &desc )
+{
+    LightHandle handle;
+    if( mImpl )
+        handle.id = mImpl->renderer.createLight( desc );
+    return handle;
+}
 
-    void Engine::setCamera( const CameraDesc &camera )
-    {
-        if( !mImpl )
-            return;
-        mImpl->renderer.setCamera( camera );
-        if( mImpl->listenerFollowsCamera )
-            mImpl->listenFrom( camera );
-    }
+void Engine::destroyLight( LightHandle handle )
+{
+    if( mImpl && handle.isValid() )
+        mImpl->renderer.destroyLight( handle.id );
+}
 
-    SoundHandle Engine::loadSound( const char *path )
-    {
-        return mImpl ? mImpl->loadSound( path, 0 ) : SoundHandle{};
-    }
+void Engine::setAmbientLight( Color skyColor, Color groundColor )
+{
+    if( mImpl )
+        mImpl->renderer.setAmbientLight( skyColor, groundColor );
+}
 
-    SoundHandle Engine::loadSound( const char *path, int maxCopies )
-    {
-        return mImpl ? mImpl->loadSound( path, static_cast<uint32_t>( std::max( maxCopies, 1 ) ) ) : SoundHandle{};
-    }
+void Engine::setCamera( Vec3 position, Vec3 target )
+{
+    if( !mImpl )
+        return;
+    mImpl->renderer.setCamera( position, target );
+    if( mImpl->listenerFollowsCamera )
+        mImpl->listenFrom( position, target );
+}
 
-    void Engine::destroySound( SoundHandle sound )
-    {
-        if( mImpl && sound.isValid() )
-            mImpl->audio.destroySound( sound.id );
-    }
+void Engine::setCamera( const CameraDesc &camera )
+{
+    if( !mImpl )
+        return;
+    mImpl->renderer.setCamera( camera );
+    if( mImpl->listenerFollowsCamera )
+        mImpl->listenFrom( camera );
+}
 
-    VoiceHandle Engine::playSound( SoundHandle sound, const PlayDesc &desc )
-    {
-        VoiceHandle handle;
-        if( mImpl && sound.isValid() )
-        {
-            const Audio::VoiceId voice = mImpl->audio.play( sound.id, desc );
-            handle = VoiceHandle{ voice.id, voice.generation };
-        }
-        return handle;
-    }
+SoundHandle Engine::loadSound( const char *path )
+{
+    return mImpl ? mImpl->loadSound( path, 0 ) : SoundHandle{};
+}
 
-    void Engine::stopVoice( VoiceHandle voice )
-    {
-        if( mImpl && voice.isValid() )
-            mImpl->audio.stop( { voice.id, voice.generation } );
-    }
+SoundHandle Engine::loadSound( const char *path, int maxCopies )
+{
+    return mImpl ? mImpl->loadSound( path, static_cast<uint32_t>( std::max( maxCopies, 1 ) ) )
+                 : SoundHandle{};
+}
 
-    void Engine::setVoicePosition( VoiceHandle voice, Vec3 position, Vec3 velocity )
-    {
-        if( mImpl && voice.isValid() )
-            mImpl->audio.setVoicePosition( { voice.id, voice.generation }, position, velocity );
-    }
+void Engine::destroySound( SoundHandle sound )
+{
+    if( mImpl && sound.isValid() )
+        mImpl->audio.destroySound( sound.id );
+}
 
-    bool Engine::isVoicePlaying( VoiceHandle voice ) const
+VoiceHandle Engine::playSound( SoundHandle sound, const PlayDesc &desc )
+{
+    VoiceHandle handle;
+    if( mImpl && sound.isValid() )
     {
-        return mImpl && voice.isValid() && mImpl->audio.isPlaying( { voice.id, voice.generation } );
+        const Audio::VoiceId voice = mImpl->audio.play( sound.id, desc );
+        handle = VoiceHandle{ voice.id, voice.generation };
     }
+    return handle;
+}
 
-    void Engine::playMusic( const char *path, float fadeSeconds )
-    {
-        if( !mImpl )
-            return;
-        const std::string cacheKey = normalizeAssetPath( path );
-        std::vector<uint8_t> bytes;
-        if( !mImpl->readAsset( cacheKey, bytes ) )
-            return;
-        std::string error;
-        if( !mImpl->audio.playMusic( std::move( bytes ), fadeSeconds, error ) )
-            logError( "audio", "playMusic rejected '" + cacheKey + "' because " + error );
-    }
+void Engine::stopVoice( VoiceHandle voice )
+{
+    if( mImpl && voice.isValid() )
+        mImpl->audio.stop( { voice.id, voice.generation } );
+}
 
-    void Engine::stopMusic( float fadeSeconds )
-    {
-        if( mImpl )
-            mImpl->audio.stopMusic( fadeSeconds );
-    }
+void Engine::setVoicePosition( VoiceHandle voice, Vec3 position, Vec3 velocity )
+{
+    if( mImpl && voice.isValid() )
+        mImpl->audio.setVoicePosition( { voice.id, voice.generation }, position, velocity );
+}
 
-    void Engine::setBusVolume( AudioBus bus, float volume )
-    {
-        if( mImpl )
-            mImpl->audio.setBusVolume( bus, volume );
-    }
+bool Engine::isVoicePlaying( VoiceHandle voice ) const
+{
+    return mImpl && voice.isValid() && mImpl->audio.isPlaying( { voice.id, voice.generation } );
+}
 
-    void Engine::setBusPaused( AudioBus bus, bool paused )
-    {
-        if( mImpl )
-            mImpl->audio.setBusPaused( bus, paused );
-    }
+void Engine::playMusic( const char *path, float fadeSeconds )
+{
+    if( !mImpl )
+        return;
+    const std::string cacheKey = normalizeAssetPath( path );
+    std::vector<uint8_t> bytes;
+    if( !mImpl->readAsset( cacheKey, bytes ) )
+        return;
+    std::string error;
+    if( !mImpl->audio.playMusic( std::move( bytes ), fadeSeconds, error ) )
+        logError( "audio", "playMusic rejected '" + cacheKey + "' because " + error );
+}
 
-    void Engine::setMasterVolume( float volume )
-    {
-        if( mImpl )
-            mImpl->audio.setMasterVolume( volume );
-    }
+void Engine::stopMusic( float fadeSeconds )
+{
+    if( mImpl )
+        mImpl->audio.stopMusic( fadeSeconds );
+}
 
-    void Engine::setListener( const ListenerDesc &listener )
-    {
-        if( !mImpl )
-            return;
-        mImpl->listenerFollowsCamera = false;
-        mImpl->audio.setListener( listener.position, listener.orientation.rotate( { 0.0f, 0.0f, -1.0f } ),
-                                  listener.orientation.rotate( { 0.0f, 1.0f, 0.0f } ), listener.velocity );
-    }
+void Engine::setBusVolume( AudioBus bus, float volume )
+{
+    if( mImpl )
+        mImpl->audio.setBusVolume( bus, volume );
+}
 
-    void Engine::followCameraWithListener()
-    {
-        if( mImpl )
-            mImpl->listenerFollowsCamera = true;
-    }
+void Engine::setBusPaused( AudioBus bus, bool paused )
+{
+    if( mImpl )
+        mImpl->audio.setBusPaused( bus, paused );
+}
 
-    bool Engine::isKeyDown( Key key ) const
-    {
-        return mImpl && mImpl->input.isKeyDown( key );
-    }
+void Engine::setMasterVolume( float volume )
+{
+    if( mImpl )
+        mImpl->audio.setMasterVolume( volume );
+}
 
-    bool Engine::wasKeyPressed( Key key ) const
-    {
-        return mImpl && mImpl->input.wasKeyPressed( key );
-    }
+void Engine::setListener( const ListenerDesc &listener )
+{
+    if( !mImpl )
+        return;
+    mImpl->listenerFollowsCamera = false;
+    mImpl->audio.setListener( listener.position, listener.orientation.rotate( { 0.0f, 0.0f, -1.0f } ),
+                              listener.orientation.rotate( { 0.0f, 1.0f, 0.0f } ), listener.velocity );
+}
 
-    bool Engine::wasKeyReleased( Key key ) const
-    {
-        return mImpl && mImpl->input.wasKeyReleased( key );
-    }
+void Engine::followCameraWithListener()
+{
+    if( mImpl )
+        mImpl->listenerFollowsCamera = true;
+}
 
-    float Engine::deltaSeconds() const
-    {
-        return mImpl ? mImpl->clock.scaledDeltaSeconds() : 0.0f;
-    }
+bool Engine::isKeyDown( Key key ) const
+{
+    return mImpl && mImpl->input.isKeyDown( key );
+}
 
-    float Engine::unscaledDeltaSeconds() const
-    {
-        return mImpl ? mImpl->clock.realDeltaSeconds() : 0.0f;
-    }
+bool Engine::wasKeyPressed( Key key ) const
+{
+    return mImpl && mImpl->input.wasKeyPressed( key );
+}
 
-    float Engine::timeScale() const
-    {
-        return mImpl ? mImpl->clock.timeScale() : 1.0f;
-    }
+bool Engine::wasKeyReleased( Key key ) const
+{
+    return mImpl && mImpl->input.wasKeyReleased( key );
+}
 
-    void Engine::setTimeScale( float scale )
-    {
-        if( mImpl )
-            mImpl->clock.setTimeScale( scale );
-    }
+float Engine::deltaSeconds() const
+{
+    return mImpl ? mImpl->clock.scaledDeltaSeconds() : 0.0f;
+}
+
+float Engine::unscaledDeltaSeconds() const
+{
+    return mImpl ? mImpl->clock.realDeltaSeconds() : 0.0f;
+}
+
+float Engine::timeScale() const
+{
+    return mImpl ? mImpl->clock.timeScale() : 1.0f;
+}
+
+void Engine::setTimeScale( float scale )
+{
+    if( mImpl )
+        mImpl->clock.setTimeScale( scale );
+}
 
 }  // namespace Rhiza

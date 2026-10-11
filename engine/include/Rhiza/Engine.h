@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include <Rhiza/Types/Audio.h>
 #include <Rhiza/Types/Camera.h>
 #include <Rhiza/Types/EngineSettings.h>
@@ -11,6 +10,7 @@
 #include <Rhiza/Types/Math.h>
 #include <Rhiza/Types/Mesh.h>
 #include <Rhiza/Types/Texture.h>
+#include <memory>
 
 namespace Rhiza
 {
@@ -24,12 +24,12 @@ public:
     Engine();
     ~Engine();
 
-    Engine(const Engine &) = delete;
-    Engine &operator=(const Engine &) = delete;
+    Engine( const Engine & ) = delete;
+    Engine &operator=( const Engine & ) = delete;
 
     // False on failure, with the reason in the log; the engine is unusable
     // until this succeeds.
-    bool initialize(const EngineSettings &settings = {});
+    bool initialize( const EngineSettings &settings = {} );
 
     // Safe to call more than once; the destructor calls it too.
     void shutdown();
@@ -65,11 +65,11 @@ public:
     // Uploads geometry once; place copies with createInstance(). Invalid
     // handle if the description is unusable - empty, not a triangle list, or
     // indices past the end of the vertex list.
-    MeshHandle createMeshAsset(const MeshDesc &desc);
+    MeshHandle createMeshAsset( const MeshDesc &desc );
 
     // Re-uploads geometry in place. Requires MeshDesc::isMutable; every
     // instance picks up the change with nothing to update per-instance.
-    void updateMesh(MeshHandle mesh, const MeshDesc &desc);
+    void updateMesh( MeshHandle mesh, const MeshDesc &desc );
 
     // Loading: paths are relative to EngineSettings::assetRoot, and the same
     // path returns the same handle without loading again. Every load needs
@@ -80,83 +80,83 @@ public:
 
     // glTF (.gltf or .glb), static geometry only. Never mutable: updateMesh
     // on a shared mesh would change it for every user.
-    MeshHandle loadMesh(const char *path);
+    MeshHandle loadMesh( const char *path );
 
     // Refused while any instance still references it.
-    void destroyMeshAsset(MeshHandle mesh);
+    void destroyMeshAsset( MeshHandle mesh );
 
     // PNG, JPG, TGA - anything FreeImage decodes.
-    TextureHandle loadTexture(const char *path, const TextureDesc &desc = {});
+    TextureHandle loadTexture( const char *path, const TextureDesc &desc = {} );
 
     // Refused while any material still references it.
-    void destroyTexture(TextureHandle texture);
+    void destroyTexture( TextureHandle texture );
 
     // A material (Ogre's "datablock"), shared across instances like a mesh.
-    MaterialHandle createMaterial(const MaterialDesc &desc);
+    MaterialHandle createMaterial( const MaterialDesc &desc );
 
     // Refused while any instance still references it.
-    void destroyMaterial(MaterialHandle material);
+    void destroyMaterial( MaterialHandle material );
 
-    InstanceHandle createInstance(MeshHandle mesh, MaterialHandle material);
+    InstanceHandle createInstance( MeshHandle mesh, MaterialHandle material );
 
     // The mesh asset and material survive; others may still reference them.
-    void destroyInstance(InstanceHandle instance);
+    void destroyInstance( InstanceHandle instance );
 
-    void setTransform(InstanceHandle handle, const Transform &transform);
+    void setTransform( InstanceHandle handle, const Transform &transform );
 
     // Only ShadingModel::Lit materials respond to lights.
-    LightHandle createLight(const LightDesc &desc);
-    void destroyLight(LightHandle handle);
+    LightHandle createLight( const LightDesc &desc );
+    void destroyLight( LightHandle handle );
 
     // Stands in for bounced light the renderer doesn't simulate; without it,
     // surfaces facing away from every light are pure black. Ogre blends the
     // two colours by how far a surface tilts toward sky or ground.
-    void setAmbientLight(Color skyColor, Color groundColor);
+    void setAmbientLight( Color skyColor, Color groundColor );
 
     // Look-at; leaves the projection as it was.
-    void setCamera(Vec3 position, Vec3 target);
-    void setCamera(const CameraDesc &camera);
+    void setCamera( Vec3 position, Vec3 target );
+    void setCamera( const CameraDesc &camera );
 
     // Sounds load like meshes and textures: cached by path, one destroy per
     // load. Mono sounds are for the world, stereo for UI. Up to
     // EngineSettings::defaultMaxCopies copies of one sound play at once.
-    SoundHandle loadSound(const char *path);
+    SoundHandle loadSound( const char *path );
 
     // Overrides how many copies may play at once - 1 for a UI click that
     // should never overlap itself. The cap belongs to the sound, so the last
     // value given wins.
-    SoundHandle loadSound(const char *path, int maxCopies);
-    void destroySound(SoundHandle sound);
+    SoundHandle loadSound( const char *path, int maxCopies );
+    void destroySound( SoundHandle sound );
 
     // At the sound's copy cap this restarts its oldest copy; when every slot
     // holds a different sound, the oldest slot is taken over.
-    VoiceHandle playSound(SoundHandle sound, const PlayDesc &desc = {});
-    void stopVoice(VoiceHandle voice);
-    void setVoicePosition(VoiceHandle voice, Vec3 position, Vec3 velocity = {});
-    bool isVoicePlaying(VoiceHandle voice) const;
+    VoiceHandle playSound( SoundHandle sound, const PlayDesc &desc = {} );
+    void stopVoice( VoiceHandle voice );
+    void setVoicePosition( VoiceHandle voice, Vec3 position, Vec3 velocity = {} );
+    bool isVoicePlaying( VoiceHandle voice ) const;
 
     // Ogg Vorbis, kept compressed and decoded while playing. Loops, and a new
     // track crossfades from the previous one over `fadeSeconds`.
-    void playMusic(const char *path, float fadeSeconds = 0.0f);
-    void stopMusic(float fadeSeconds = 0.0f);
+    void playMusic( const char *path, float fadeSeconds = 0.0f );
+    void stopMusic( float fadeSeconds = 0.0f );
 
-    void setBusVolume(AudioBus bus, float volume);
-    void setBusPaused(AudioBus bus, bool paused);
+    void setBusVolume( AudioBus bus, float volume );
+    void setBusPaused( AudioBus bus, bool paused );
 
     // Scales every bus, music included, on top of their own volumes.
-    void setMasterVolume(float volume);
+    void setMasterVolume( float volume );
 
     // The listener follows the camera until this is called, and again after
     // followCameraWithListener().
-    void setListener(const ListenerDesc &listener);
+    void setListener( const ListenerDesc &listener );
     void followCameraWithListener();
 
     // Keys are identified by physical position - see Key in Types/Input.h.
     // wasKeyPressed/Released are true only on the frame of the transition;
     // holding a key does not repeat them.
-    bool isKeyDown(Key key) const;
-    bool wasKeyPressed(Key key) const;
-    bool wasKeyReleased(Key key) const;
+    bool isKeyDown( Key key ) const;
+    bool wasKeyPressed( Key key ) const;
+    bool wasKeyReleased( Key key ) const;
 
     // deltaSeconds drives gameplay and in-world animation - this is what
     // hitstop freezes. unscaledDeltaSeconds drives input, UI and anything
@@ -165,7 +165,7 @@ public:
     float deltaSeconds() const;
     float unscaledDeltaSeconds() const;
     float timeScale() const;
-    void setTimeScale(float scale);
+    void setTimeScale( float scale );
 
 private:
     struct Impl;
