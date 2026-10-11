@@ -1,6 +1,7 @@
 #pragma once
 
-struct SDL_IOStream;
+#include <iosfwd>
+#include <memory>
 
 namespace Rhiza
 {
@@ -13,6 +14,7 @@ namespace Rhiza
 class LogOutputs
 {
 public:
+    LogOutputs();
     ~LogOutputs();
 
     void attach( const char *organization, const char *application );
@@ -21,7 +23,7 @@ public:
 private:
     int mConsoleSink = 0;
     int mFileSink = 0;
-    SDL_IOStream *mFile = nullptr;
+    std::unique_ptr<std::ofstream> mFile;
 };
 
 }  // namespace Rhiza

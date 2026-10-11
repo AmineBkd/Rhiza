@@ -4,6 +4,9 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace Rhiza
@@ -35,19 +38,25 @@ void writeToConsole( LogLevel level, std::string_view category, std::string_view
                     message.data() );
 }
 
-void writeToFile( SDL_IOStream *file, LogLevel level, std::string_view category, std::string_view message )
+// Flushed to the OS, not synced to the device: the OS still writes the line
+// out if the game crashes, and a sync per line cost ~1.5 ms (SDL_FlushIO).
+void writeToFile( std::ofstream &file, LogLevel level, std::string_view category, std::string_view message )
 {
     SDL_Time now = 0;
     SDL_DateTime time{};
     SDL_GetCurrentTime( &now );
     SDL_TimeToDateTime( now, &time, true );
-    SDL_IOprintf( file, "%02d:%02d:%02d.%03d %-7s [%.*s] %.*s\n", time.hour, time.minute, time.second,
-                  time.nanosecond / 1000000, logLevelName( level ), static_cast<int>( category.size() ),
-                  category.data(), static_cast<int>( message.size() ), message.data() );
-    SDL_FlushIO( file );
+
+    char prefix[32];
+    std::snprintf( prefix, sizeof( prefix ), "%02d:%02d:%02d.%03d %-7s [", time.hour, time.minute,
+                   time.second, time.nanosecond / 1000000, logLevelName( level ) );
+    file << prefix << category << "] " << message << '\n';
+    file.flush();
 }
 
 }  // namespace
+
+LogOutputs::LogOutputs() = default;
 
 LogOutputs::~LogOutputs()
 {
@@ -73,16 +82,21 @@ void LogOutputs::attach( const char *organization, const char *application )
 
     // Fails harmlessly on the first run, when there is nothing to keep.
     SDL_RenamePath( path.c_str(), previous.c_str() );
-    mFile = SDL_IOFromFile( path.c_str(), "w" );
-    if( !mFile )
+
+    // SDL's paths are UTF-8; going through u8string keeps a non-ASCII user
+    // folder working on Windows, where a narrow path would be read as ANSI.
+    mFile =
+        std::make_unique<std::ofstream>( std::filesystem::path( std::u8string( path.begin(), path.end() ) ) );
+    if( !mFile->is_open() )
     {
-        logWarning( "platform", "could not open " + path + ": " + SDL_GetError() );
+        mFile.reset();
+        logWarning( "platform", "could not open " + path );
         return;
     }
 
-    SDL_IOStream *file = mFile;
+    std::ofstream *file = mFile.get();
     mFileSink = addLogSink( [file]( LogLevel level, std::string_view category, std::string_view message ) {
-        writeToFile( file, level, category, message );
+        writeToFile( *file, level, category, message );
     } );
     logInfo( "platform", "logging to " + path );
 }
@@ -100,11 +114,7 @@ void LogOutputs::detach()
         removeLogSink( mConsoleSink );
         mConsoleSink = 0;
     }
-    if( mFile )
-    {
-        SDL_CloseIO( mFile );
-        mFile = nullptr;
-    }
+    mFile.reset();
 }
 
 }  // namespace Rhiza

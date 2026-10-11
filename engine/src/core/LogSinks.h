@@ -2,6 +2,7 @@
 
 #include <Rhiza/Log.h>
 
+#include <chrono>
 #include <functional>
 #include <string_view>
 
@@ -18,6 +19,11 @@ void removeLogSink( int id );
 
 // Writes any pending "repeated" count now, and forgets the last message.
 void flushLog();
+
+// The engine calls this once per frame. A repeat that has gone a second
+// without a copy is over: its total is written now, and the next copy of
+// that message counts as new.
+void tickLog( std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now() );
 
 const char *logLevelName( LogLevel level );
 

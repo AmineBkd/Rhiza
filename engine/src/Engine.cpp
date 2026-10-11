@@ -7,6 +7,7 @@
 #include "core/AssetPath.h"
 #include "core/Clock.h"
 #include "core/Gltf.h"
+#include "core/LogSinks.h"
 #include "physics/Physics.h"
 #include "platform/AudioOutput.h"
 #include "platform/FileSystem.h"
@@ -174,6 +175,7 @@ bool Engine::beginFrame()
     // Measures the previous whole iteration - the conventional meaning
     // of "this frame's delta time".
     mImpl->clock.tick();
+    tickLog();
     mImpl->physics.clearEvents();
     mImpl->physics.bank( mImpl->clock.scaledDeltaSeconds() );
 

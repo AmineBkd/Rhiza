@@ -370,7 +370,7 @@ public:
         if( level == Ogre::LML_CRITICAL )
             logError( "ogre", message );
         else
-            logDebug( "ogre", message );
+            RHIZA_LOG_DEBUG( "ogre", message );
         skipThisMessage = true;
     }
 };
