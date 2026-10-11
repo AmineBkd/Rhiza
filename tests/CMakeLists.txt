@@ -29,3 +29,6 @@ target_compile_definitions(RhizaAudioTests PRIVATE
 
 rhiza_add_tests(RhizaFrameworkTests RegistryTests.cpp)
 target_link_libraries(RhizaFrameworkTests PRIVATE RhizaFramework)
+
+rhiza_add_tests(RhizaPhysicsTests PhysicsTests.cpp)
+target_link_libraries(RhizaPhysicsTests PRIVATE RhizaPhysics RhizaFramework)

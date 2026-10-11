@@ -15,7 +15,8 @@ target_compile_options(RhizaThirdParty PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/W0,
 # src/ is split by layer, and dependencies point one way: toward core.
 # platform/, render/ and audio/ never include one another - they meet only
 # through core/ types or plain callbacks wired up in Engine.cpp. SDL appears
-# only under platform/, Ogre only under render/, miniaudio only under audio/.
+# only under platform/, Ogre only under render/, miniaudio only under audio/,
+# Box2D only under physics/.
 # Each layer is its own library so a test links only the layer it tests.
 add_library(RhizaCore STATIC
     src/core/Clock.cpp
@@ -41,6 +42,7 @@ add_library(RhizaCore STATIC
     include/Rhiza/Types/Material.h
     include/Rhiza/Types/Math.h
     include/Rhiza/Types/Mesh.h
+    include/Rhiza/Types/Physics.h
     include/Rhiza/Types/Texture.h
     include/Rhiza/Shapes.h
     include/Rhiza/Log.h
@@ -100,6 +102,13 @@ if(WIN32)
     target_compile_definitions(RhizaRender PRIVATE $<$<CONFIG:Debug>:RHIZA_DEBUG_BUILD>)
 endif()
 
+add_library(RhizaPhysics STATIC
+    src/physics/Physics.cpp
+    src/physics/Physics.h
+)
+target_link_libraries(RhizaPhysics PUBLIC RhizaCore PRIVATE box2d::box2d)
+rhiza_enable_warnings(RhizaPhysics)
+
 # The facade, and the only target a game links. The layers stay private, so
 # their headers and src/ never reach game code.
 add_library(${PROJECT_NAME} STATIC
@@ -107,5 +116,5 @@ add_library(${PROJECT_NAME} STATIC
     include/Rhiza/Engine.h
 )
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(${PROJECT_NAME} PRIVATE RhizaCore RhizaPlatform RhizaAudio RhizaRender)
+target_link_libraries(${PROJECT_NAME} PRIVATE RhizaCore RhizaPlatform RhizaAudio RhizaRender RhizaPhysics)
 rhiza_enable_warnings(${PROJECT_NAME})

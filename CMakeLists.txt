@@ -12,6 +12,7 @@ include(RhizaWarnings)
 
 find_package(SDL3 CONFIG REQUIRED)
 find_package(OgreNext REQUIRED)
+find_package(box2d CONFIG REQUIRED)
 
 # Header-only, and vcpkg ships no CMake package for it.
 find_path(CGLTF_INCLUDE_DIR cgltf.h REQUIRED)

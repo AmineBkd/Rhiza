@@ -60,4 +60,11 @@ struct VoiceHandle
     bool isValid() const { return id != 0; }
 };
 
+struct BodyHandle
+{
+    uint32_t id = 0;
+
+    bool isValid() const { return id != 0; }
+};
+
 }  // namespace Rhiza

@@ -9,15 +9,19 @@
 #include <Rhiza/Types/Material.h>
 #include <Rhiza/Types/Math.h>
 #include <Rhiza/Types/Mesh.h>
+#include <Rhiza/Types/Physics.h>
 #include <Rhiza/Types/Texture.h>
+#include <cstdint>
 #include <memory>
+#include <span>
 
 namespace Rhiza
 {
 
-// Facade over the engine's window and input (SDL3), renderer (Ogre-Next) and
-// audio (miniaudio). Nothing outside engine/src ever includes their headers:
-// this class and Rhiza/Types/ are the entire public surface.
+// Facade over the engine's window and input (SDL3), renderer (Ogre-Next),
+// audio (miniaudio) and physics (Box2D). Nothing outside engine/src ever
+// includes their headers: this class and Rhiza/Types/ are the entire public
+// surface.
 class Engine
 {
 public:
@@ -150,6 +154,47 @@ public:
     // followCameraWithListener().
     void setListener( const ListenerDesc &listener );
     void followCameraWithListener();
+
+    // 2D physics in the XY plane - see Types/Physics.h. A body owns its
+    // shapes; destroying it destroys them.
+    BodyHandle createBody( const BodyDesc &desc );
+    void destroyBody( BodyHandle body );
+
+    // False, with the reason in the log, if the shape is unusable.
+    bool addShape( BodyHandle body, const ShapeDesc &shape );
+
+    BodyPose bodyPose( BodyHandle body ) const;
+    void setBodyPose( BodyHandle body, const BodyPose &pose );  // teleports
+    Vec2 linearVelocity( BodyHandle body ) const;
+    void setLinearVelocity( BodyHandle body, Vec2 velocity );
+    float angularVelocity( BodyHandle body ) const;
+    void setAngularVelocity( BodyHandle body, float radiansPerSecond );
+
+    // A force lasts one step, so apply it inside the step loop below; an
+    // impulse changes velocity at once.
+    void applyForce( BodyHandle body, Vec2 force );
+    void applyImpulse( BodyHandle body, Vec2 impulse );
+    void applyTorque( BodyHandle body, float torque );
+
+    void setGravity( Vec2 gravity );
+
+    // Physics advances in fixed steps of EngineSettings::physicsStepSeconds,
+    // paid for with scaled time, so hitstop freezes it too:
+    //
+    //   while( engine.physicsStepDue() )
+    //   {
+    //       ... apply this step's forces ...
+    //       engine.stepPhysics();
+    //   }
+    bool physicsStepDue() const;
+    void stepPhysics();
+
+    // Every contact and sensor event from this frame's steps.
+    std::span<const ContactEvent> contactEvents() const;
+
+    // The closest shape between `from` and `to` whose category is in
+    // `maskBits`.
+    RaycastHit raycast( Vec2 from, Vec2 to, uint64_t maskBits = ~uint64_t( 0 ) ) const;
 
     // Keys are identified by physical position - see Key in Types/Input.h.
     // wasKeyPressed/Released are true only on the frame of the transition;

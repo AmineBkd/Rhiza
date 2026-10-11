@@ -8,9 +8,10 @@
 namespace Rhiza
 {
 
-// The only place in framework/ that holds an Engine reference. Every other
-// system deals in components alone, so replacing the renderer means
-// rewriting this file and nothing else above it.
+// The rendering bridge: each engine service has one file in framework/ that
+// holds an Engine reference, and every other system deals in components
+// alone, so replacing the renderer means rewriting this file and nothing
+// else above it.
 
 // Call once at startup. Destroys an entity's instance with its MeshRenderer;
 // the mesh and material are shared, so they stay.

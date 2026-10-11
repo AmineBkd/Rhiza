@@ -2,9 +2,11 @@
 #include <cmath>
 
 #include <Rhiza/Components/MeshRenderer.h>
+#include <Rhiza/Components/RigidBody.h>
 #include <Rhiza/Engine.h>
 #include <Rhiza/Registry.h>
 #include <Rhiza/Shapes.h>
+#include <Rhiza/Systems/PhysicsSystem.h>
 #include <Rhiza/Systems/RenderSystem.h>
 #include <Rhiza/Types/Camera.h>
 #include <Rhiza/Types/Handles.h>
@@ -12,12 +14,11 @@
 #include <Rhiza/Types/Light.h>
 #include <Rhiza/Types/Material.h>
 #include <Rhiza/Types/Math.h>
+#include <Rhiza/Types/Physics.h>
 #include <Rhiza/Types/Texture.h>
 
 namespace
 {
-
-constexpr Rhiza::Vec3 kZAxis{ 0.0f, 0.0f, 1.0f };
 
 struct Spin
 {
@@ -36,6 +37,15 @@ int main()
 
     Rhiza::Registry registry;
     Rhiza::connectRenderSystem( registry, engine );
+    Rhiza::connectPhysicsSystem( registry, engine );
+
+    auto addBody = [&]( Rhiza::Entity entity, Rhiza::BodyDesc body, const Rhiza::ShapeDesc &shape ) {
+        body.userData = Rhiza::toUserData( entity );
+        const Rhiza::BodyHandle handle = engine.createBody( body );
+        engine.addShape( handle, shape );
+        registry.addComponent( entity, Rhiza::RigidBody{ handle } );
+        return handle;
+    };
 
     auto spawn = [&]( Rhiza::MeshHandle mesh, Rhiza::MaterialHandle material,
                       const Rhiza::Transform &transform ) {
@@ -61,6 +71,9 @@ int main()
     shipMaterial.blend = Rhiza::BlendMode::AlphaBlend;
     const Rhiza::Entity ship = spawn( quad, engine.createMaterial( shipMaterial ),
                                       { { 0.0f, 0.0f, 1.0f }, {}, { 1.5f, 1.5f, 1.0f } } );
+    Rhiza::BodyDesc shipBodyDesc;
+    shipBodyDesc.linearDamping = 1.5f;
+    const Rhiza::BodyHandle shipBody = addBody( ship, shipBodyDesc, Rhiza::ShapeDesc::circle( 0.6f ) );
 
     Rhiza::MaterialDesc flameMaterial;
     flameMaterial.shading = Rhiza::ShadingModel::Unlit;
@@ -85,6 +98,17 @@ int main()
             rockMesh, rockMaterial,
             { { std::cos( around ) * 7.0f, std::sin( around ) * 7.0f, 0.0f }, {}, { size, size, size } } );
         registry.addComponent( rock, Spin{ spinAxes[i % 3], 0.4f + 0.15f * static_cast<float>( i ) } );
+
+        // The tumble is Spin's, so physics leaves rotation alone. 0.58 is
+        // rock.glb's radius at scale 1.
+        Rhiza::BodyDesc rockBody;
+        rockBody.position = { std::cos( around ) * 7.0f, std::sin( around ) * 7.0f };
+        rockBody.linearDamping = 0.5f;
+        rockBody.fixedRotation = true;
+        Rhiza::ShapeDesc rockShape = Rhiza::ShapeDesc::circle( 0.58f * size );
+        rockShape.density = 3.0f;
+        rockShape.restitution = 0.4f;
+        addBody( rock, rockBody, rockShape );
     }
 
     Rhiza::CameraDesc camera;
@@ -96,9 +120,7 @@ int main()
     Rhiza::VoiceHandle thrustVoice;
     engine.playMusic( "music.ogg", 2.0f );
 
-    // Radians; 0 = nose up (+Y).
-    float heading = 0.0f;
-    Rhiza::Vec3 velocity;
+    const uint64_t shipUserData = Rhiza::toUserData( ship );
     float time = 0.0f;
 
     while( engine.beginFrame() )
@@ -106,24 +128,32 @@ int main()
         const float dt = engine.deltaSeconds();
         time += dt;
 
-        // A/D turn, W thrusts, Space pings, Q/E zoom.
+        // A/D turn, W thrusts, Space pings (so does bumping a rock), Q/E zoom.
         constexpr float turnRate = 3.5f;
-        constexpr float thrust = 12.0f;
-        constexpr float drag = 1.5f;
+        constexpr float thrustForce = 14.0f;
+        float turn = 0.0f;
         if( engine.isKeyDown( Rhiza::Key::A ) )
-            heading += turnRate * dt;
+            turn += turnRate;
         if( engine.isKeyDown( Rhiza::Key::D ) )
-            heading -= turnRate * dt;
+            turn -= turnRate;
+        engine.setAngularVelocity( shipBody, turn );
 
-        const Rhiza::Vec3 forward{ -std::sin( heading ), std::cos( heading ), 0.0f };
+        // Radians; 0 = nose up (+Y).
+        auto forwardOf = []( float heading ) {
+            return Rhiza::Vec2{ -std::sin( heading ), std::cos( heading ) };
+        };
         const bool thrusting = engine.isKeyDown( Rhiza::Key::W );
-        if( thrusting )
-            velocity += forward * ( thrust * dt );
-        velocity -= velocity * ( drag * dt );
+        while( engine.physicsStepDue() )
+        {
+            if( thrusting )
+                engine.applyForce( shipBody, forwardOf( engine.bodyPose( shipBody ).angle ) * thrustForce );
+            engine.stepPhysics();
+        }
+        Rhiza::physicsSystem( registry, engine );
 
         Rhiza::Transform *shipTransform = registry.getComponent<Rhiza::Transform>( ship );
-        shipTransform->position += velocity * dt;
-        shipTransform->rotation = Rhiza::Quat::fromAxisAngle( kZAxis, heading );
+        const Rhiza::Vec2 forward2d = forwardOf( engine.bodyPose( shipBody ).angle );
+        const Rhiza::Vec3 forward{ forward2d.x, forward2d.y, 0.0f };
 
         // No velocity for the ship's own sounds: the listener rides along with
         // it, and Doppler is for things moving relative to the ears.
@@ -142,7 +172,11 @@ int main()
         }
         engine.setVoicePosition( thrustVoice, shipPosition );
 
-        if( engine.wasKeyPressed( Rhiza::Key::Space ) )
+        bool pinged = engine.wasKeyPressed( Rhiza::Key::Space );
+        for( const Rhiza::ContactEvent &contact : engine.contactEvents() )
+            pinged |= contact.type == Rhiza::ContactEventType::Begin &&
+                      ( contact.userDataA == shipUserData || contact.userDataB == shipUserData );
+        if( pinged )
         {
             Rhiza::PlayDesc ping;
             ping.positional = true;

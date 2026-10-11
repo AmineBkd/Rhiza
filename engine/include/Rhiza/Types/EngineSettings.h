@@ -32,6 +32,13 @@ struct EngineSettings
 
     // Copies of one sound playing at once, unless loadSound overrides it.
     int defaultMaxCopies = 4;
+
+    // None, since Rhiza is built for space; a platformer would set { 0, -10 }.
+    Vec2 gravity;
+
+    // Physics advances in steps of exactly this long, so it behaves the same
+    // at any frame rate.
+    float physicsStepSeconds = 1.0f / 60.0f;
 };
 
 }  // namespace Rhiza

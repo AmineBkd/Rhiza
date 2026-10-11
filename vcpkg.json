@@ -7,6 +7,7 @@
     "cgltf",
     "miniaudio",
     "stb",
-    "catch2"
+    "catch2",
+    "box2d"
   ]
 }

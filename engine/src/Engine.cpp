@@ -7,6 +7,7 @@
 #include "core/AssetPath.h"
 #include "core/Clock.h"
 #include "core/Gltf.h"
+#include "physics/Physics.h"
 #include "platform/AudioOutput.h"
 #include "platform/FileSystem.h"
 #include "platform/Input.h"
@@ -26,6 +27,7 @@ struct Engine::Impl
     Input input;
     Clock clock;
     Audio audio;
+    Physics physics;
     AudioOutput audioOutput;
     std::string assetRoot;
     bool running = false;
@@ -143,6 +145,9 @@ bool Engine::initialize( const EngineSettings &settings )
         logWarning( "audio", "audio could not start; the game will run silent" );
     }
 
+    if( !mImpl->physics.initialize( settings.gravity, settings.physicsStepSeconds ) )
+        logError( "physics", "physics could not start: physicsStepSeconds must be above zero" );
+
     mImpl->running = true;
     return true;
 }
@@ -155,6 +160,7 @@ void Engine::shutdown()
     // Output first: its callback reads from the mixer.
     mImpl->audioOutput.stop();
     mImpl->audio.shutdown();
+    mImpl->physics.shutdown();
     mImpl->renderer.shutdown();
     mImpl->window.shutdown();
     mImpl.reset();
@@ -168,6 +174,8 @@ bool Engine::beginFrame()
     // Measures the previous whole iteration - the conventional meaning
     // of "this frame's delta time".
     mImpl->clock.tick();
+    mImpl->physics.clearEvents();
+    mImpl->physics.bank( mImpl->clock.scaledDeltaSeconds() );
 
     if( !mImpl->window.pollEvents( mImpl->input ) )
     {
@@ -445,6 +453,111 @@ void Engine::followCameraWithListener()
 {
     if( mImpl )
         mImpl->listenerFollowsCamera = true;
+}
+
+BodyHandle Engine::createBody( const BodyDesc &desc )
+{
+    BodyHandle handle;
+    if( mImpl )
+        handle.id = mImpl->physics.createBody( desc );
+    return handle;
+}
+
+void Engine::destroyBody( BodyHandle body )
+{
+    if( mImpl )
+        mImpl->physics.destroyBody( body.id );
+}
+
+bool Engine::addShape( BodyHandle body, const ShapeDesc &shape )
+{
+    if( !mImpl )
+        return false;
+    std::string error;
+    if( mImpl->physics.addShape( body.id, shape, error ) )
+        return true;
+    logError( "physics", "addShape rejected a shape because " + error );
+    return false;
+}
+
+BodyPose Engine::bodyPose( BodyHandle body ) const
+{
+    return mImpl ? mImpl->physics.pose( body.id ) : BodyPose{};
+}
+
+void Engine::setBodyPose( BodyHandle body, const BodyPose &pose )
+{
+    if( mImpl )
+        mImpl->physics.setPose( body.id, pose );
+}
+
+Vec2 Engine::linearVelocity( BodyHandle body ) const
+{
+    return mImpl ? mImpl->physics.linearVelocity( body.id ) : Vec2{};
+}
+
+void Engine::setLinearVelocity( BodyHandle body, Vec2 velocity )
+{
+    if( mImpl )
+        mImpl->physics.setLinearVelocity( body.id, velocity );
+}
+
+float Engine::angularVelocity( BodyHandle body ) const
+{
+    return mImpl ? mImpl->physics.angularVelocity( body.id ) : 0.0f;
+}
+
+void Engine::setAngularVelocity( BodyHandle body, float radiansPerSecond )
+{
+    if( mImpl )
+        mImpl->physics.setAngularVelocity( body.id, radiansPerSecond );
+}
+
+void Engine::applyForce( BodyHandle body, Vec2 force )
+{
+    if( mImpl )
+        mImpl->physics.applyForce( body.id, force );
+}
+
+void Engine::applyImpulse( BodyHandle body, Vec2 impulse )
+{
+    if( mImpl )
+        mImpl->physics.applyImpulse( body.id, impulse );
+}
+
+void Engine::applyTorque( BodyHandle body, float torque )
+{
+    if( mImpl )
+        mImpl->physics.applyTorque( body.id, torque );
+}
+
+void Engine::setGravity( Vec2 gravity )
+{
+    if( mImpl )
+        mImpl->physics.setGravity( gravity );
+}
+
+bool Engine::physicsStepDue() const
+{
+    return mImpl && mImpl->physics.stepDue();
+}
+
+void Engine::stepPhysics()
+{
+    if( mImpl )
+        mImpl->physics.step();
+}
+
+std::span<const ContactEvent> Engine::contactEvents() const
+{
+    if( !mImpl )
+        return {};
+    return mImpl->physics.events();
+}
+
+RaycastHit Engine::raycast( Vec2 from, Vec2 to, uint64_t maskBits ) const
+{
+    return mImpl ? mImpl->physics.raycast( from, to, maskBits ) : RaycastHit{};
 }
 
 bool Engine::isKeyDown( Key key ) const
