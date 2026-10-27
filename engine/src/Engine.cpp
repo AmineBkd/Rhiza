@@ -108,7 +108,8 @@ bool Engine::initialize( const EngineSettings &settings )
     mImpl = std::make_unique<Impl>();
     mImpl->logOutputs.attach( settings.organization, settings.application );
 
-    if( !mImpl->window.initialize( settings.windowTitle, settings.windowWidth, settings.windowHeight ) )
+    if( !mImpl->window.initialize( settings.windowTitle, settings.windowWidth, settings.windowHeight,
+                                   settings.headless ) )
     {
         mImpl.reset();
         return false;
@@ -130,10 +131,12 @@ bool Engine::initialize( const EngineSettings &settings )
     const bool audioStarted =
         audio->initialize( toCount( settings.monoSoundSlots ), toCount( settings.stereoSoundSlots ),
                            toCount( settings.defaultMaxCopies ) ) &&
-        mImpl->audioOutput.start( Audio::kSampleRate, Audio::kChannels,
-                                  [audio]( float *frames, int frameCount ) {
-                                      audio->mix( frames, static_cast<uint32_t>( frameCount ) );
-                                  } );
+        mImpl->audioOutput.start(
+            Audio::kSampleRate, Audio::kChannels,
+            [audio]( float *frames, int frameCount ) {
+                audio->mix( frames, static_cast<uint32_t>( frameCount ) );
+            },
+            settings.headless );
     if( audioStarted )
     {
         mImpl->listenFrom( settings.cameraPosition, settings.cameraTarget );

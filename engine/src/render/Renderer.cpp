@@ -17,6 +17,7 @@
 #include "OgreAbiUtils.h"
 #include "OgreArchiveManager.h"
 #include "OgreCamera.h"
+#include "OgreDepthBuffer.h"
 #include "OgreHlmsCommon.h"
 #include "OgreHlmsManager.h"
 #include "OgreHlmsSamplerblock.h"
@@ -56,21 +57,27 @@ namespace Rhiza
 namespace
 {
 
+struct RenderSystemPlugin
+{
+    const char *baseName;
+    const char *name;
+};
+
 // The vcpkg ogre-next port enables one render system per platform. Each
 // ships as a runtime-loaded plugin rather than something you link against
 // (see FindOgreNext.cmake), found by its Ogre-internal display name.
 #if defined( _WIN32 )
-constexpr const char *kPluginBaseName = "RenderSystem_Direct3D11";
-constexpr const char *kRenderSystemName = "Direct3D11 Rendering Subsystem";
+constexpr RenderSystemPlugin kGpuRenderSystem{ "RenderSystem_Direct3D11", "Direct3D11 Rendering Subsystem" };
 #elif defined( __APPLE__ )
-constexpr const char *kPluginBaseName = "RenderSystem_Metal";
-constexpr const char *kRenderSystemName = "Metal Rendering Subsystem";
+constexpr RenderSystemPlugin kGpuRenderSystem{ "RenderSystem_Metal", "Metal Rendering Subsystem" };
 #elif defined( __linux__ )
-constexpr const char *kPluginBaseName = "RenderSystem_GL3Plus";
-constexpr const char *kRenderSystemName = "OpenGL 3+ Rendering Subsystem";
+constexpr RenderSystemPlugin kGpuRenderSystem{ "RenderSystem_GL3Plus", "OpenGL 3+ Rendering Subsystem" };
 #else
 #    error "Unsupported platform: add its Ogre-Next render system plugin name here."
 #endif
+
+// Built on every platform, beside the GPU one. Draws nothing.
+constexpr RenderSystemPlugin kNullRenderSystem{ "RenderSystem_NULL", "NULL Rendering Subsystem" };
 
 // Plugins never carry the Unix "lib" prefix (ogre_config_plugin clears it)
 // and land somewhere other than beside the regular libraries, differently
@@ -85,7 +92,7 @@ constexpr const char *kRenderSystemName = "OpenGL 3+ Rendering Subsystem";
 // this tracks how *this* binary was built (RHIZA_DEBUG_BUILD, set by
 // engine/CMakeLists.txt) rather than probing the filesystem or trusting
 // ambient debug macros.
-std::string getRenderSystemPluginPath()
+std::string getRenderSystemPluginPath( const RenderSystemPlugin &plugin )
 {
 #if defined( _WIN32 )
     constexpr const char *libExtension = ".dll";
@@ -106,7 +113,7 @@ std::string getRenderSystemPluginPath()
     const std::string debugSuffix;
 #endif
 
-    return std::string( RHIZA_OGRE_INSTALL_ROOT ) + "/" + dir + "/" + kPluginBaseName + debugSuffix +
+    return std::string( RHIZA_OGRE_INSTALL_ROOT ) + "/" + dir + "/" + plugin.baseName + debugSuffix +
            libExtension;
 }
 
@@ -409,13 +416,14 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle, const
     const Ogre::AbiCookie abiCookie = Ogre::generateAbiCookie();
     mRoot = OGRE_NEW Ogre::Root( &abiCookie, Ogre::BLANKSTRING, Ogre::BLANKSTRING, Ogre::BLANKSTRING, title );
 
-    mRoot->loadPlugin( getRenderSystemPluginPath(), false, nullptr );
+    const RenderSystemPlugin &plugin = settings.headless ? kNullRenderSystem : kGpuRenderSystem;
+    mRoot->loadPlugin( getRenderSystemPluginPath( plugin ), false, nullptr );
 
-    Ogre::RenderSystem *renderSystem = mRoot->getRenderSystemByName( kRenderSystemName );
+    Ogre::RenderSystem *renderSystem = mRoot->getRenderSystemByName( plugin.name );
     if( !renderSystem )
     {
-        logError( "render", std::string( "render system '" ) + kRenderSystemName +
-                                "' was not found after loading " + getRenderSystemPluginPath() );
+        logError( "render", std::string( "render system '" ) + plugin.name +
+                                "' was not found after loading " + getRenderSystemPluginPath( plugin ) );
         return false;
     }
 
@@ -454,8 +462,24 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle, const
     const Ogre::ColourValue backgroundColour( 0.15f, 0.15f, 0.2f );
     if( !compositorManager->hasWorkspaceDefinition( workspaceName ) )
         compositorManager->createBasicWorkspaceDef( workspaceName, backgroundColour, Ogre::IdString() );
-    mWorkspace = compositorManager->addWorkspace( mSceneManager, mRenderWindow->getTexture(), mCamera,
-                                                  workspaceName, true );
+    Ogre::TextureGpu *target = mRenderWindow->getTexture();
+    if( settings.headless )
+    {
+        // Ogre-Next 3.0's NULL window texture can't name its window, so the
+        // compositor reads a garbage depth buffer from it and crashes. A
+        // plain render target takes its depth buffer from the pool instead,
+        // given the depth format the GPU backends default to and NULL lacks.
+        target = mRoot->getRenderSystem()->getTextureGpuManager()->createTexture(
+            "RhizaHeadlessTarget", Ogre::GpuPageOutStrategy::Discard, Ogre::TextureFlags::RenderToTexture,
+            Ogre::TextureTypes::Type2D );
+        target->setResolution( static_cast<Ogre::uint32>( settings.windowWidth ),
+                               static_cast<Ogre::uint32>( settings.windowHeight ) );
+        target->setPixelFormat( Ogre::PFG_RGBA8_UNORM );
+        target->_setDepthBufferDefaults( Ogre::DepthBuffer::POOL_DEFAULT, false,
+                                         Ogre::DepthBuffer::DefaultDepthBufferFormat );
+        target->scheduleTransitionTo( Ogre::GpuResidency::Resident );
+    }
+    mWorkspace = compositorManager->addWorkspace( mSceneManager, target, mCamera, workspaceName, true );
 
     return true;
 }

@@ -85,14 +85,17 @@ Window::~Window()
     shutdown();
 }
 
-bool Window::initialize( const std::string &title, int width, int height )
+bool Window::initialize( const std::string &title, int width, int height, bool headless )
 {
+    if( headless )
+        SDL_SetHint( SDL_HINT_VIDEO_DRIVER, "offscreen" );
 #if defined( __linux__ )
     // GL3Plus reaches the window through GLX, which needs a real X11
     // window - under SDL3's default Wayland backend there isn't one, and
     // getNativeHandle() comes back empty. XWayland makes this work anyway.
     // https://wiki.libsdl.org/SDL3/SDL_HINT_VIDEO_DRIVER
-    SDL_SetHint( SDL_HINT_VIDEO_DRIVER, "x11" );
+    else
+        SDL_SetHint( SDL_HINT_VIDEO_DRIVER, "x11" );
 #endif
 
     if( !SDL_InitSubSystem( SDL_INIT_VIDEO ) )

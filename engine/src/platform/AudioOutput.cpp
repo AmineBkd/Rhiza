@@ -24,8 +24,10 @@ AudioOutput::~AudioOutput()
     stop();
 }
 
-bool AudioOutput::start( int sampleRate, int channels, FillFunction fill )
+bool AudioOutput::start( int sampleRate, int channels, FillFunction fill, bool headless )
 {
+    if( headless )
+        SDL_SetHint( SDL_HINT_AUDIO_DRIVER, "dummy" );
     if( !SDL_InitSubSystem( SDL_INIT_AUDIO ) )
     {
         logWarning( "audio", std::string( "audio unavailable: " ) + SDL_GetError() );

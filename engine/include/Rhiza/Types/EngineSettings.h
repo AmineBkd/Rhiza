@@ -16,6 +16,10 @@ struct EngineSettings
     int windowWidth = 1280;
     int windowHeight = 720;
 
+    // No window, GPU or sound card: everything runs, nothing is shown or
+    // heard. For tests and CI machines that have no display.
+    bool headless = false;
+
     // Off-axis by default so a solid object shows more than one face, which
     // makes lighting legible.
     Vec3 cameraPosition{ 3.5f, 3.0f, 5.0f };

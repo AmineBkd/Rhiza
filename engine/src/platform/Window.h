@@ -19,7 +19,9 @@ class Window
 public:
     ~Window();
 
-    bool initialize( const std::string &title, int width, int height );
+    // Headless: SDL's offscreen driver, so no display is needed and nothing
+    // appears.
+    bool initialize( const std::string &title, int width, int height, bool headless );
     void shutdown();
 
     // Feeds every key transition to `input`, releasing all keys on focus

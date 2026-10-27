@@ -19,7 +19,9 @@ public:
     ~AudioOutput();
 
     // False if there is no usable device; the game then runs silent.
-    bool start( int sampleRate, int channels, FillFunction fill );
+    // Headless: SDL's dummy driver, which pulls the mix in real time with no
+    // sound card.
+    bool start( int sampleRate, int channels, FillFunction fill, bool headless );
     void stop();
 
     // SDL's callback only.
