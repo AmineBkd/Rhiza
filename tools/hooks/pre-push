@@ -1,0 +1,22 @@
+#!/bin/sh
+# CI's format check, run on each commit being pushed, so uncommitted edits never block a push.
+
+python=$(command -v python || command -v python3)
+if [ -z "$python" ]; then
+    echo "pre-push: python not found, skipping the format check" >&2
+    exit 0
+fi
+
+failed=0
+while read -r localRef localSha remoteRef remoteSha; do
+    case $localSha in
+        *[!0]*) ;;
+        *) continue ;; # a deleted branch: nothing to check
+    esac
+    "$python" tools/format.py --check --rev "$localSha" || failed=1
+done
+
+if [ $failed -ne 0 ]; then
+    echo "pre-push: unformatted code - run 'python tools/format.py', commit, push again" >&2
+fi
+exit $failed

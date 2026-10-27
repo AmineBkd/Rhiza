@@ -7,6 +7,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Output all executables to a 'bin' folder at the root of the project
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 
+# Git never turns on a repository's own hooks, so each clone does it here on first configure.
+option(RHIZA_GIT_HOOKS "Run tools/hooks (the format check before a push)" ON)
+find_package(Git QUIET)
+if(RHIZA_GIT_HOOKS AND GIT_FOUND AND EXISTS ${CMAKE_SOURCE_DIR}/.git)
+    execute_process(COMMAND ${GIT_EXECUTABLE} config core.hooksPath
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT_VARIABLE hooksPath OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(hooksPath STREQUAL "")
+        execute_process(COMMAND ${GIT_EXECUTABLE} config core.hooksPath tools/hooks WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    endif()
+endif()
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(RhizaWarnings)
 
