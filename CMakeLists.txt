@@ -4,8 +4,8 @@ project(RhizaRoot CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Output all executables to a 'bin' folder at the root of the project
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
+# bin/<config>/ with every generator: Makefiles add no config folder on their own.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/$<CONFIG>)
 
 # Git never turns on a repository's own hooks, so each clone does it here on first configure.
 option(RHIZA_GIT_HOOKS "Run tools/hooks (the format check before a push)" ON)

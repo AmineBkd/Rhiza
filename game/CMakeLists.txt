@@ -18,13 +18,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # relinks, so an edited asset alone would never be copied. The folder is
 # spelled out because $<TARGET_FILE_DIR> would make this target depend on
 # the exe, which already depends on it.
-get_property(_isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if(_isMultiConfig)
-    set(_exeDir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>")
-else()
-    set(_exeDir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-endif()
 add_custom_target(GameAssets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/assets ${_exeDir}/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/assets
+            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/assets
 )
 add_dependencies(${PROJECT_NAME} GameAssets)
