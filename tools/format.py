@@ -4,6 +4,7 @@
     python tools/format.py           rewrite files in place
     python tools/format.py --check   fail if anything is unformatted (CI)
     python tools/format.py --check --rev <commit>   the same, on a commit instead of the working tree
+    python tools/format.py --check --rev <commit> --changed   only the files that commit added or changed
 
     git config core.hooksPath tools/hooks   run the check before every push
 """
@@ -55,13 +56,17 @@ def main():
     root = os.path.dirname(HERE)
     rev = sys.argv[sys.argv.index("--rev") + 1] if "--rev" in sys.argv else None
     if rev:
-        listed = subprocess.run(["git", "ls-tree", "-r", "--name-only", rev], cwd=root, capture_output=True,
-                                text=True, check=True).stdout.split()
+        # A merge counts as changing what it brings onto its first parent.
+        command = ["git", "diff-tree", "-r", "--name-only", "--no-commit-id", "--root", "-m", "--first-parent",
+                   "--diff-filter=d", rev] if "--changed" in sys.argv else ["git", "ls-tree", "-r", "--name-only", rev]
+        listed = subprocess.run(command, cwd=root, capture_output=True, text=True, check=True).stdout.split()
         listed = [f for f in listed if any(fnmatch.fnmatch(f, pattern) for pattern in PATTERNS)]
     else:
         listed = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard", *PATTERNS],
                                 cwd=root, capture_output=True, text=True, check=True).stdout.split()
     files = sorted({f for f in listed if not f.startswith(EXCLUDED)})
+    if not files:
+        return 0  # clang-format given no files would read stdin
 
     if rev:
         # Unpacked in one go, then one clang-format run: per-file processes made a push take seconds.

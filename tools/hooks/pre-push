@@ -1,5 +1,5 @@
 #!/bin/sh
-# CI's format check, run on each commit being pushed, so uncommitted edits never block a push.
+# CI's format check, run on every commit being pushed, so uncommitted edits never block a push.
 
 python=$(command -v python || command -v python3)
 if [ -z "$python" ]; then
@@ -13,7 +13,20 @@ while read -r localRef localSha remoteRef remoteSha; do
         *[!0]*) ;;
         *) continue ;; # a deleted branch: nothing to check
     esac
-    "$python" tools/format.py --check --rev "$localSha" || failed=1
+
+    # A new branch, or a remote tip this clone hasn't fetched: whatever no remote has yet.
+    if git cat-file -e "$remoteSha^{commit}" 2>/dev/null; then
+        commits=$(git rev-list "$remoteSha..$localSha")
+    else
+        commits=$(git rev-list "$localSha" --not --remotes)
+    fi
+
+    for commit in $commits; do
+        if ! "$python" tools/format.py --check --rev "$commit" --changed; then
+            echo "pre-push: in $(git log -1 --format='%h %s' "$commit")" >&2
+            failed=1
+        fi
+    done
 done
 
 if [ $failed -ne 0 ]; then
