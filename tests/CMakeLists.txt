@@ -27,6 +27,20 @@ target_compile_definitions(RhizaAudioTests PRIVATE
     RHIZA_TEST_OGG="${CMAKE_CURRENT_SOURCE_DIR}/../game/assets/music.ogg"
 )
 
+# Ogre's NULL render system: real Ogre, no GPU or window.
+rhiza_add_tests(RhizaRenderTests RenderTests.cpp)
+target_link_libraries(RhizaRenderTests PRIVATE RhizaRender)
+target_compile_definitions(RhizaRenderTests PRIVATE
+    RHIZA_TEST_PNG="${CMAKE_CURRENT_SOURCE_DIR}/../game/assets/ship.png"
+)
+
+# The whole engine, headless, in a scene of its own rather than a game's.
+rhiza_add_tests(RhizaEngineTests EngineTests.cpp)
+target_link_libraries(RhizaEngineTests PRIVATE RhizaEngine)
+target_compile_definitions(RhizaEngineTests PRIVATE
+    RHIZA_TEST_ASSETS="${CMAKE_CURRENT_SOURCE_DIR}/../game/assets"
+)
+
 rhiza_add_tests(RhizaFrameworkTests RegistryTests.cpp)
 target_link_libraries(RhizaFrameworkTests PRIVATE RhizaFramework)
 
