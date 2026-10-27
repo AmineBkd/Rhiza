@@ -105,7 +105,9 @@ TEST_CASE( "A scene using every service runs until a body lands" )
     {
         REQUIRE( runFrame( engine ) );
         const Rhiza::BodyPose pose = engine.bodyPose( ball );
-        engine.setTransform( sprite, { { pose.position.x, pose.position.y, 0.0f } } );
+        Rhiza::Transform transform;
+        transform.position = { pose.position.x, pose.position.y, 0.0f };
+        engine.setTransform( sprite, transform );
         for( const Rhiza::ContactEvent &contact : engine.contactEvents() )
             landed |= contact.type == Rhiza::ContactEventType::Begin;
     }
