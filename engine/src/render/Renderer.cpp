@@ -749,7 +749,9 @@ uint32_t Renderer::createTexture( const std::vector<uint8_t> &encoded, const std
     }
 
     const Ogre::uint32 filters =
-        desc.filter == TextureFilter::Linear ? Ogre::TextureFilter::TypeGenerateDefaultMipmaps : 0u;
+        desc.filter == TextureFilter::Linear
+            ? static_cast<Ogre::uint32>( Ogre::TextureFilter::TypeGenerateDefaultMipmaps )
+            : 0u;
 
     // Not sRGB: the backbuffer isn't either, so pixels come out as authored.
     const std::string alias = textureCacheKey( cacheKey, desc );
