@@ -1,17 +1,15 @@
 @echo off
 setlocal
 
-rem Runs the last build. Use zbuild.bat to build first.
+rem Runs the last build of the game. Build it first with zbuild.bat.
 rem
-rem   zrun.bat              -> RelWithDebInfo
-rem   zrun.bat Release      -> Release
+rem   zrun.bat                  -> Debug
+rem   zrun.bat RelWithDebInfo   -> RelWithDebInfo
 
 set "config=%~1"
-if "%config%"=="" set "config=RelWithDebInfo"
+if "%config%"=="" set "config=Debug"
 
-rem The Visual Studio generator appends the configuration to
-rem CMAKE_RUNTIME_OUTPUT_DIRECTORY, so the exe lands in bin\<config>\.
-rem A single-config generator puts it straight in bin\, so try both.
+rem Visual Studio builds into bin\<config>\; other generators straight into bin\.
 if exist "bin\%config%\Game.exe" (
     "bin\%config%\Game.exe"
     goto :eof

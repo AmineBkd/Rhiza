@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
-# RelWithDebInfo by default: -O2 -g, and it works on every platform.
+# Configures and builds.
 #
-#   ./zbuild.sh              -> RelWithDebInfo  (-O2 -g)
-#   ./zbuild.sh Debug        -> -g, no optimisation. Linux and macOS only;
-#                               still fails Ogre's ABI check on Windows.
-#   ./zbuild.sh Release      -> -O3
-config="${1:-RelWithDebInfo}"
+#   ./zbuild.sh                  -> Debug
+#   ./zbuild.sh RelWithDebInfo   -> optimised, with symbols
+#   ./zbuild.sh Release          -> optimised
+config="${1:-Debug}"
 
 case "$(uname -s)" in
     Linux*)
@@ -29,11 +28,7 @@ case "$(uname -s)" in
         ;;
 esac
 
-# CMAKE_BUILD_TYPE is what single-config generators (Makefiles, on Linux and
-# macOS) read at configure time; --config is what multi-config generators
-# (Visual Studio) read at build time. Each ignores the other, so one pair of
-# lines covers all three platforms. Passing neither leaves the build type
-# empty, which is not a middle ground - it means no -O2 and no -g at once.
+# Makefiles read the config at configure time, Visual Studio at build time; each ignores the other.
 cmake --preset "$preset" -DCMAKE_BUILD_TYPE="$config"
 cmake --build --preset "$preset" --config "$config"
 
