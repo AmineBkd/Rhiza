@@ -96,3 +96,60 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+  # Builds only: the tests would need a device or an emulator to run on.
+  android:
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [android-x64, android-arm64]
+
+    runs-on: ubuntu-latest
+
+    env:
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-binary-cache,readwrite
+      NDK_VERSION: 27.1.12297006
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Get cache key inputs
+        id: cache-inputs
+        run: |
+          mkdir -p "${{ github.workspace }}/vcpkg-binary-cache"
+          echo "sha=$(git -C third_party/vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS}-${ImageVersion}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-binary-cache
+          key: vcpkg-${{ matrix.preset }}-${{ steps.cache-inputs.outputs.image }}-${{ steps.cache-inputs.outputs.sha }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/**') }}
+          restore-keys: vcpkg-${{ matrix.preset }}-
+
+      # The same NDK as development machines, rather than whichever the image ships.
+      - name: Install the NDK and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build autoconf autoconf-archive automake libtool
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Bootstrap vcpkg
+        run: ./third_party/vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+
+      - name: Save vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-binary-cache
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --config Release
