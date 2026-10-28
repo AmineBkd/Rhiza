@@ -106,7 +106,15 @@ bool Window::initialize( const std::string &title, int width, int height, bool h
 
     // Intentionally not resizable: the renderer does not yet re-create its
     // swapchain on resize, so a resize would just stretch the last frame.
-    mWindow = SDL_CreateWindow( title.c_str(), width, height, 0 );
+    SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_SetStringProperty( props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title.c_str() );
+    SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width );
+    SDL_SetNumberProperty( props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height );
+    // SDL on macOS gives a window OpenGL unless told the graphics are handled
+    // elsewhere, and the offscreen driver can't load OpenGL there.
+    SDL_SetBooleanProperty( props, SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN, headless );
+    mWindow = SDL_CreateWindowWithProperties( props );
+    SDL_DestroyProperties( props );
     if( !mWindow )
     {
         logError( "platform", std::string( "SDL_CreateWindow failed: " ) + SDL_GetError() );
