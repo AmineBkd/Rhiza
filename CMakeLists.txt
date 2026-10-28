@@ -6,6 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # bin/<config>/ with every generator: Makefiles add no config folder on their own.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/$<CONFIG>)
+if(ANDROID)
+    # Where game/android picks up libmain.so for the APK.
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/android/$<CONFIG>/lib/${ANDROID_ABI})
+endif()
 
 # Git never turns on a repository's own hooks, so each clone does it here on first configure.
 option(RHIZA_GIT_HOOKS "Run tools/hooks (the format check before a push)" ON)
@@ -35,4 +39,7 @@ enable_testing()
 add_subdirectory(engine)
 add_subdirectory(framework)
 add_subdirectory(game)
-add_subdirectory(tests)
+# Built for the phone, the tests couldn't run on this machine.
+if(NOT ANDROID)
+    add_subdirectory(tests)
+endif()

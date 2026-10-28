@@ -25,12 +25,12 @@ select_library_configurations(OGRENEXT)
 # not contain them). Anything that #includes Hlms/Unlit/OgreHlmsUnlit.h or
 # Hlms/Pbs/OgreHlmsPbs.h must link the matching library too, or every method
 # comes back as an unresolved external at link time despite compiling fine.
-find_library(OGRENEXT_HLMSUNLIT_LIBRARY_RELEASE NAMES OgreNextHlmsUnlit)
-find_library(OGRENEXT_HLMSUNLIT_LIBRARY_DEBUG NAMES OgreNextHlmsUnlit_d)
+find_library(OGRENEXT_HLMSUNLIT_LIBRARY_RELEASE NAMES OgreNextHlmsUnlit OgreNextHlmsUnlitStatic)
+find_library(OGRENEXT_HLMSUNLIT_LIBRARY_DEBUG NAMES OgreNextHlmsUnlit_d OgreNextHlmsUnlitStatic_d)
 select_library_configurations(OGRENEXT_HLMSUNLIT)
 
-find_library(OGRENEXT_HLMSPBS_LIBRARY_RELEASE NAMES OgreNextHlmsPbs)
-find_library(OGRENEXT_HLMSPBS_LIBRARY_DEBUG NAMES OgreNextHlmsPbs_d)
+find_library(OGRENEXT_HLMSPBS_LIBRARY_RELEASE NAMES OgreNextHlmsPbs OgreNextHlmsPbsStatic)
+find_library(OGRENEXT_HLMSPBS_LIBRARY_DEBUG NAMES OgreNextHlmsPbs_d OgreNextHlmsPbsStatic_d)
 select_library_configurations(OGRENEXT_HLMSPBS)
 
 # vcpkg installs a single OgreBuildSettings.h, generated from the release build
@@ -111,11 +111,39 @@ if(OgreNext_FOUND AND NOT TARGET OgreNext::OgreNext)
         )
     endif()
 
-    # Static triplets need OGRE_STATIC_LIB defined (skips dllexport/import
-    # decoration) and, once you add RenderSystems, will also need their
-    # transitive deps (freetype/freeimage/zziplib/zlib/etc.) linked explicitly.
+    # Static triplets (Android) need OGRE_STATIC_LIB defined, which skips
+    # dllexport/import decoration, and the libraries Ogre itself links
+    # against, which a static library doesn't carry along.
     if(OGRENEXT_LIBRARY MATCHES "Static")
         target_compile_definitions(OgreNext::OgreNext INTERFACE OGRE_STATIC_LIB)
+
+        find_package(freeimage CONFIG REQUIRED)
+        find_package(ZLIB REQUIRED)
+        find_library(OGRENEXT_ZZIP_LIBRARY NAMES zzip REQUIRED)
+        target_link_libraries(OgreNext::OgreNext INTERFACE freeimage::FreeImage "${OGRENEXT_ZZIP_LIBRARY}" ZLIB::ZLIB)
+        if(ANDROID)
+            target_link_libraries(OgreNext::OgreNext INTERFACE android log)
+        endif()
+
+        # No plugins to load at run time either: each render system is a
+        # library to link, and Renderer.cpp installs it by hand. Only the
+        # release build is used, as with OgreNextMain off Windows.
+        foreach(_ogrenext_rs Vulkan NULL)
+            find_library(OGRENEXT_${_ogrenext_rs}_LIBRARY NAMES RenderSystem_${_ogrenext_rs}Static
+                         PATH_SUFFIXES OGRE-Next)
+            if(OGRENEXT_${_ogrenext_rs}_LIBRARY)
+                add_library(OgreNext::RenderSystem_${_ogrenext_rs} UNKNOWN IMPORTED)
+                set_target_properties(OgreNext::RenderSystem_${_ogrenext_rs} PROPERTIES
+                    IMPORTED_LOCATION "${OGRENEXT_${_ogrenext_rs}_LIBRARY}"
+                    INTERFACE_LINK_LIBRARIES OgreNext::OgreNext
+                )
+            endif()
+        endforeach()
+        if(TARGET OgreNext::RenderSystem_Vulkan)
+            # Ogre compiles its GLSL to SPIR-V on the device with glslang.
+            find_package(glslang CONFIG REQUIRED)
+            target_link_libraries(OgreNext::RenderSystem_Vulkan INTERFACE glslang::glslang glslang::SPIRV vulkan)
+        endif()
     endif()
 
     # This build is NOT static: OgreNextMain is a shared library, and the render
