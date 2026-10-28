@@ -25,8 +25,14 @@ bool readFile( const std::string &path, std::vector<uint8_t> &out )
 
 std::string defaultAssetRoot()
 {
+#if defined( __ANDROID__ )
+    // SDL reads relative paths from inside the APK, where Gradle put the
+    // assets folder's contents at the top.
+    return {};
+#else
     const char *basePath = SDL_GetBasePath();
     return basePath ? std::string( basePath ) + "assets" : std::string();
+#endif
 }
 
 }  // namespace Rhiza

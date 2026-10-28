@@ -15,6 +15,7 @@
 #include "Hlms/Unlit/OgreHlmsUnlit.h"
 #include "Hlms/Unlit/OgreHlmsUnlitDatablock.h"
 #include "OgreAbiUtils.h"
+#include "OgreArchiveFactory.h"
 #include "OgreArchiveManager.h"
 #include "OgreCamera.h"
 #include "OgreDepthBuffer.h"
@@ -27,6 +28,7 @@
 #include "OgreLogManager.h"
 #include "OgreMesh2.h"
 #include "OgreMeshManager2.h"
+#include "OgrePlugin.h"
 #include "OgreRenderSystem.h"
 #include "OgreRoot.h"
 #include "OgreSceneManager.h"
@@ -39,6 +41,14 @@
 #include "OgreWindow.h"
 #include "Vao/OgreVaoManager.h"
 #include "Vao/OgreVertexArrayObject.h"
+
+#if defined( OGRE_STATIC_LIB )
+#    include "OgreNULLPlugin.h"
+#    include "OgreVulkanPlugin.h"
+#endif
+#if defined( __ANDROID__ )
+#    include "Android/OgreAPKFileSystemArchive.h"
+#endif
 
 // Injected by engine/CMakeLists.txt. RHIZA_MEDIA_DIR is the folder holding
 // this engine's own copy of the Hlms shader templates (see engine/media);
@@ -64,10 +74,13 @@ struct RenderSystemPlugin
 };
 
 // The vcpkg ogre-next port enables one render system per platform. Each
-// ships as a runtime-loaded plugin rather than something you link against
-// (see FindOgreNext.cmake), found by its Ogre-internal display name.
+// ships as a runtime-loaded plugin rather than something you link against,
+// except on Android where it's linked in (see FindOgreNext.cmake). Either
+// way Root finds it by its Ogre-internal display name.
 #if defined( _WIN32 )
 constexpr RenderSystemPlugin kGpuRenderSystem{ "RenderSystem_Direct3D11", "Direct3D11 Rendering Subsystem" };
+#elif defined( __ANDROID__ )  // Before __linux__, which Android also defines.
+constexpr RenderSystemPlugin kGpuRenderSystem{ "RenderSystem_Vulkan", "Vulkan Rendering Subsystem" };
 #elif defined( __APPLE__ )
 constexpr RenderSystemPlugin kGpuRenderSystem{ "RenderSystem_Metal", "Metal Rendering Subsystem" };
 #elif defined( __linux__ )
@@ -92,7 +105,8 @@ constexpr RenderSystemPlugin kNullRenderSystem{ "RenderSystem_NULL", "NULL Rende
 // this tracks how *this* binary was built (RHIZA_DEBUG_BUILD, set by
 // engine/CMakeLists.txt) rather than probing the filesystem or trusting
 // ambient debug macros.
-std::string getRenderSystemPluginPath( const RenderSystemPlugin &plugin )
+// A static Ogre (Android) has no plugin files: there this goes unused.
+[[maybe_unused]] std::string getRenderSystemPluginPath( const RenderSystemPlugin &plugin )
 {
 #if defined( _WIN32 )
     constexpr const char *libExtension = ".dll";
@@ -408,22 +422,39 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle, const
 {
     const std::string title = settings.windowTitle;
 
+    mOgreLogForwarder = std::make_unique<OgreLogForwarder>();
+    const Ogre::AbiCookie abiCookie = Ogre::generateAbiCookie();
+#if defined( __ANDROID__ )
+    // Ogre-Next 3.0's Root crashes on Android unless it makes the LogManager
+    // itself. Unnamed, its log writes no file, but it also copies to logcat.
+    mRoot = OGRE_NEW Ogre::Root( &abiCookie, Ogre::BLANKSTRING, Ogre::BLANKSTRING, Ogre::BLANKSTRING, title );
+    Ogre::LogManager::getSingleton().getDefaultLog()->addListener( mOgreLogForwarder.get() );
+#else
     // Created before Root, so Root adopts it instead of opening a log file.
     mLogManager = OGRE_NEW Ogre::LogManager();
-    mOgreLogForwarder = std::make_unique<OgreLogForwarder>();
     mLogManager->createLog( "Ogre", true, false, true )->addListener( mOgreLogForwarder.get() );
-
-    const Ogre::AbiCookie abiCookie = Ogre::generateAbiCookie();
     mRoot = OGRE_NEW Ogre::Root( &abiCookie, Ogre::BLANKSTRING, Ogre::BLANKSTRING, Ogre::BLANKSTRING, title );
+#endif
 
     const RenderSystemPlugin &plugin = settings.headless ? kNullRenderSystem : kGpuRenderSystem;
-    mRoot->loadPlugin( getRenderSystemPluginPath( plugin ), false, nullptr );
+#if defined( OGRE_STATIC_LIB )
+    // Nothing to load: the render system is linked in, Root just needs an instance.
+    if( settings.headless )
+        mStaticPlugin = std::make_unique<Ogre::NULLPlugin>();
+    else
+        mStaticPlugin = std::make_unique<Ogre::VulkanPlugin>();
+    mRoot->installPlugin( mStaticPlugin.get(), nullptr );
+    const std::string pluginSource = "the linked-in plugin";
+#else
+    const std::string pluginSource = getRenderSystemPluginPath( plugin );
+    mRoot->loadPlugin( pluginSource, false, nullptr );
+#endif
 
     Ogre::RenderSystem *renderSystem = mRoot->getRenderSystemByName( plugin.name );
     if( !renderSystem )
     {
         logError( "render", std::string( "render system '" ) + plugin.name +
-                                "' was not found after loading " + getRenderSystemPluginPath( plugin ) );
+                                "' was not found after loading " + pluginSource );
         return false;
     }
 
@@ -436,14 +467,18 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle, const
     // window we already own rather than one Ogre creates. Only the
     // underlying value differs, which getNativeHandle() already resolved.
     Ogre::NameValuePairList params;
+#if defined( __ANDROID__ )
+    params["ANativeWindow"] = Ogre::StringConverter::toString( windowHandle.value );
+#else
     params["externalWindowHandle"] = Ogre::StringConverter::toString( windowHandle.value );
+#endif
     params["vsync"] = "Yes";
 
     mRenderWindow =
         mRoot->createRenderWindow( title, static_cast<Ogre::uint32>( settings.windowWidth ),
                                    static_cast<Ogre::uint32>( settings.windowHeight ), false, &params );
 
-    registerHlms();
+    registerHlms( windowHandle );
 
     mSceneManager = mRoot->createSceneManager( Ogre::ST_GENERIC, 1, "RhizaSceneManager" );
 
@@ -484,10 +519,21 @@ bool Renderer::initializeInternal( const NativeWindowHandle &windowHandle, const
     return true;
 }
 
-void Renderer::registerHlms()
+void Renderer::registerHlms( const NativeWindowHandle &windowHandle )
 {
     Ogre::ArchiveManager &archiveManager = Ogre::ArchiveManager::getSingleton();
+#if defined( __ANDROID__ )
+    // Gradle packs engine/media into the APK, so the shaders are read from there.
+    mApkArchives = std::make_unique<Ogre::APKFileSystemArchiveFactory>(
+        reinterpret_cast<AAssetManager *>( windowHandle.assetManager ) );
+    archiveManager.addArchiveFactory( mApkArchives.get() );
+    const Ogre::String mediaRoot;
+    const Ogre::String archiveType = "APKFileSystem";
+#else
+    (void)windowHandle;
     const Ogre::String mediaRoot = std::string( RHIZA_MEDIA_DIR ) + "/";
+    const Ogre::String archiveType = "FileSystem";
+#endif
 
     // Each implementation names the shader-template folders it needs,
     // relative to our media root. They're vendored in engine/media/Hlms -
@@ -496,8 +542,8 @@ void Renderer::registerHlms()
                              const Ogre::StringVector &libraryFoldersPaths,
                              Ogre::ArchiveVec &outLibraryFolders ) -> Ogre::Archive * {
         for( const Ogre::String &libPath : libraryFoldersPaths )
-            outLibraryFolders.push_back( archiveManager.load( mediaRoot + libPath, "FileSystem", true ) );
-        return archiveManager.load( mediaRoot + mainFolderPath, "FileSystem", true );
+            outLibraryFolders.push_back( archiveManager.load( mediaRoot + libPath, archiveType, true ) );
+        return archiveManager.load( mediaRoot + mainFolderPath, archiveType, true );
     };
 
     Ogre::HlmsManager *hlmsManager = mRoot->getHlmsManager();
@@ -563,6 +609,9 @@ void Renderer::shutdownOgre()
     mRenderWindow = nullptr;
     mCamera = nullptr;
     mDeviceLossListener.reset();
+    // Root only uses these, and is gone now.
+    mStaticPlugin.reset();
+    mApkArchives.reset();
 }
 
 void Renderer::renderOneFrame()

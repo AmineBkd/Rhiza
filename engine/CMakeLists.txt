@@ -69,6 +69,10 @@ add_library(RhizaPlatform STATIC
     src/platform/LogOutputs.h
 )
 target_link_libraries(RhizaPlatform PUBLIC RhizaCore PRIVATE SDL3::SDL3)
+if(ANDROID)
+    # AAssetManager_fromJava, for the renderer to read shaders from the APK.
+    target_link_libraries(RhizaPlatform PRIVATE android)
+endif()
 rhiza_enable_warnings(RhizaPlatform)
 
 add_library(RhizaAudio STATIC
@@ -84,6 +88,9 @@ add_library(RhizaRender STATIC
     src/render/Renderer.h
 )
 target_link_libraries(RhizaRender PUBLIC RhizaCore PRIVATE OgreNext::OgreNext)
+if(ANDROID)
+    target_link_libraries(RhizaRender PRIVATE OgreNext::RenderSystem_Vulkan OgreNext::RenderSystem_NULL)
+endif()
 rhiza_enable_warnings(RhizaRender)
 
 # Consumed by render/Renderer.cpp: where this engine's own copy of the Hlms
@@ -114,6 +121,7 @@ rhiza_enable_warnings(RhizaPhysics)
 add_library(${PROJECT_NAME} STATIC
     src/Engine.cpp
     include/Rhiza/Engine.h
+    include/Rhiza/Main.h
 )
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(${PROJECT_NAME} PRIVATE RhizaCore RhizaPlatform RhizaAudio RhizaRender RhizaPhysics)

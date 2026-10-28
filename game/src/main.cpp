@@ -4,6 +4,7 @@
 #include <Rhiza/Components/MeshRenderer.h>
 #include <Rhiza/Components/RigidBody.h>
 #include <Rhiza/Engine.h>
+#include <Rhiza/Main.h>
 #include <Rhiza/Registry.h>
 #include <Rhiza/Shapes.h>
 #include <Rhiza/Systems/PhysicsSystem.h>
@@ -29,7 +30,7 @@ struct Spin
 
 }  // namespace
 
-int main()
+int main( int, char *[] )
 {
     Rhiza::Engine engine;
     if( !engine.initialize() )

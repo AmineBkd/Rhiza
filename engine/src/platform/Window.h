@@ -32,6 +32,10 @@ public:
 
 private:
     SDL_Window *mWindow = nullptr;
+
+    // Android only: keeps the Java AssetManager behind the handle's
+    // assetManager alive, as a JNI global reference.
+    void *mJavaAssets = nullptr;
 };
 
 }  // namespace Rhiza

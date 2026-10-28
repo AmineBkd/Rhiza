@@ -4,11 +4,23 @@
 
 #include <SDL3/SDL.h>
 
+#if defined( __ANDROID__ )
+#    include <android/asset_manager_jni.h>
+#    include <jni.h>
+#endif
+
 namespace Rhiza
 {
 
 namespace
 {
+
+#if defined( __ANDROID__ )
+JNIEnv *jniEnv()
+{
+    return static_cast<JNIEnv *>( SDL_GetAndroidJNIEnv() );
+}
+#endif
 
 // The only function in the engine that knows SDL's scancode numbering.
 // Anything unlisted falls through to Key::Unknown, which Input ignores.
@@ -89,7 +101,7 @@ bool Window::initialize( const std::string &title, int width, int height, bool h
 {
     if( headless )
         SDL_SetHint( SDL_HINT_VIDEO_DRIVER, "offscreen" );
-#if defined( __linux__ )
+#if defined( __linux__ ) && !defined( __ANDROID__ )
     // GL3Plus reaches the window through GLX, which needs a real X11
     // window - under SDL3's default Wayland backend there isn't one, and
     // getNativeHandle() comes back empty. XWayland makes this work anyway.
@@ -122,11 +134,31 @@ bool Window::initialize( const std::string &title, int width, int height, bool h
         return false;
     }
 
+#if defined( __ANDROID__ )
+    JNIEnv *env = jniEnv();
+    jobject activity = static_cast<jobject>( SDL_GetAndroidActivity() );
+    jclass activityClass = env->GetObjectClass( activity );
+    jmethodID getAssets =
+        env->GetMethodID( activityClass, "getAssets", "()Landroid/content/res/AssetManager;" );
+    jobject assets = env->CallObjectMethod( activity, getAssets );
+    mJavaAssets = env->NewGlobalRef( assets );
+    env->DeleteLocalRef( assets );
+    env->DeleteLocalRef( activityClass );
+    env->DeleteLocalRef( activity );
+#endif
+
     return true;
 }
 
 void Window::shutdown()
 {
+#if defined( __ANDROID__ )
+    if( mJavaAssets )
+    {
+        jniEnv()->DeleteGlobalRef( static_cast<jobject>( mJavaAssets ) );
+        mJavaAssets = nullptr;
+    }
+#endif
     if( mWindow )
     {
         SDL_DestroyWindow( mWindow );
@@ -175,6 +207,15 @@ NativeWindowHandle Window::getNativeHandle() const
         handle.value = static_cast<uintptr_t>( xid );
     else if( void *nsWindow = SDL_GetPointerProperty( props, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr ) )
         handle.value = reinterpret_cast<uintptr_t>( nsWindow );
+    else if( void *androidWindow =
+                 SDL_GetPointerProperty( props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr ) )
+        handle.value = reinterpret_cast<uintptr_t>( androidWindow );
+
+#if defined( __ANDROID__ )
+    if( mJavaAssets )
+        handle.assetManager = reinterpret_cast<uintptr_t>(
+            AAssetManager_fromJava( jniEnv(), static_cast<jobject>( mJavaAssets ) ) );
+#endif
 
     return handle;
 }

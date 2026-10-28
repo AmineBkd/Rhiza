@@ -30,6 +30,8 @@ class Light;
 class HlmsDatablock;
 class TextureGpu;
 class LogManager;
+class Plugin;
+class ArchiveFactory;
 }  // namespace Ogre
 
 namespace Rhiza
@@ -112,7 +114,7 @@ private:
     // Both implementations are always registered, even if a project uses
     // only one: they are how Rhiza expresses 3D (Pbs) and 2D (Unlit), and a
     // scene may mix them freely.
-    void registerHlms();
+    void registerHlms( const NativeWindowHandle &windowHandle );
 
     struct TextureAsset
     {
@@ -168,6 +170,9 @@ private:
     Ogre::LogManager *mLogManager = nullptr;
     std::unique_ptr<OgreLogForwarder> mOgreLogForwarder;
     Ogre::Root *mRoot = nullptr;
+    // Android only: Root borrows these, so they must outlive it.
+    std::unique_ptr<Ogre::Plugin> mStaticPlugin;
+    std::unique_ptr<Ogre::ArchiveFactory> mApkArchives;
     Ogre::SceneManager *mSceneManager = nullptr;
     Ogre::Camera *mCamera = nullptr;
     Ogre::Window *mRenderWindow = nullptr;
