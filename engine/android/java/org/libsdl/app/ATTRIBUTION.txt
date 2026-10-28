@@ -1,0 +1,16 @@
+These Java files are copied unmodified from SDL 3.4.14
+(https://github.com/libsdl-org/SDL), from its android-project directory,
+matching the version vcpkg's sdl3 port builds. SDL is zlib licensed; its
+licence, which must travel with these copies, is in LICENSE.txt beside this
+file.
+
+They are the Java half of SDL on Android: the activity Android starts, which
+loads libmain.so and runs the game's SDL_main on its own thread, and the
+surface, input, audio and controller plumbing SDL's C code calls back into.
+vcpkg builds only the C half and installs none of these, so they are vendored
+here, as engine/media/Hlms is.
+
+Both halves must come from the same SDL release: SDLActivity compares its
+version with the native library's at startup and refuses to run on a
+mismatch. When the sdl3 port is updated, copy these files again from the
+matching release.
