@@ -6,3 +6,6 @@ CMakeCache.txt*
 /.vs/
 /out/
 /Rhiza.log
+/game/android/.gradle/
+/game/android/build/
+/game/android/local.properties

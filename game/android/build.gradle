@@ -1,0 +1,35 @@
+// Packs the game into an APK. libmain.so comes prebuilt from CMake's
+// android presets, so this only compiles SDL's Java side and zips it all up.
+//
+//   ./gradlew assembleDebug                       -> packs bin/android/Debug
+//   ./gradlew assembleDebug -PrhizaConfig=Release -> packs bin/android/Release
+plugins {
+    id 'com.android.application' version '9.3.1'
+}
+
+def rhizaConfig = findProperty('rhizaConfig') ?: 'Debug'
+def repo = file('../..')
+
+android {
+    namespace = 'io.github.aminebkd.rhiza.game'
+    compileSdk = 35
+    // Only to strip libmain.so's debug symbols as it goes into the APK.
+    ndkVersion = '27.1.12297006'
+
+    defaultConfig {
+        applicationId = 'io.github.aminebkd.rhiza.game'
+        minSdk = 28
+        targetSdk = 35
+        versionCode = 1
+        versionName = '0.1'
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs = ["${repo}/engine/android/java"]
+            jniLibs.srcDirs = ["${repo}/bin/android/${rhizaConfig}/lib"]
+            // Both land at the root of the APK: the game's files, and Hlms/ for Ogre.
+            assets.srcDirs = ["${repo}/game/assets", "${repo}/engine/media"]
+        }
+    }
+}
